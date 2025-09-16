@@ -1,0 +1,8 @@
+{
+  "atRules": {
+    "tailwind": {
+      "prelude": "<custom-ident>",
+      "descriptors": {}
+    }
+  }
+}
