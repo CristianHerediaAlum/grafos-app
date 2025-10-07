@@ -1,15 +1,20 @@
 // src/components/Grafo.jsx
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Network } from 'vis-network';
 import { DataSet } from 'vis-data';
+
+import GrafoIO from './GrafoIO';
+
 
 const Grafo = () => {
   const containerRef = useRef(null);
   const networkRef = useRef(null);
   const nodeCounterRef = useRef(6); // Empezar desde 6 ya que tenemos 5 nodos iniciales
   const selectedNodeRef = useRef(null);
+  const [isNetworkReady, setIsNetworkReady] = useState(false);
 
   useEffect(() => {
+    // Inicializar nodos y aristas
     const nodes = new DataSet([
       { id: 1, label: "Nodo 1" },
       { id: 2, label: "Nodo 2" },
@@ -63,6 +68,30 @@ const Grafo = () => {
 
     const network = new Network(containerRef.current, data, options);
     networkRef.current = network;
+    setIsNetworkReady(true);
+
+    // Funciones
+    const getClickedNodeId = (e) => {
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      return networkRef.current.getNodeAt({x,y});
+    }
+
+    const directedAddEdgeIfNotExists = (from, to) => {
+      const existingEdge = edges.get().find(
+        (edge) =>
+          (edge.from === from && edge.to === to)
+      );
+
+      if (!existingEdge) {
+        edges.add({ from, to });
+        console.log(`Arista creada de ${from} a ${to}`);
+      } else {
+        console.log(`Ya existe una arista de ${from} a ${to}`);
+      }
+    }
 
     // Evento para crear nodos al hacer clic
     const handleClick = (event) => {
@@ -94,15 +123,9 @@ const Grafo = () => {
     };
 
     const handleMouseDown = (e) => {
+      e.preventDefault();
+      const clickedNodeId = getClickedNodeId(e);
       if(e.button === 1) { // Botón central
-        e.preventDefault();
-
-        const rect = containerRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-
-
-        const clickedNodeId = network.getNodeAt({x,y});
 
         if(clickedNodeId) {
           nodes.remove({id:clickedNodeId});
@@ -111,18 +134,6 @@ const Grafo = () => {
 
       }
       else if (e.button === 2) { // Botón derecho
-        e.preventDefault();
-        
-        // Obtener las coordenadas relativas al canvas
-        const rect = containerRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        // Convertir coordenadas DOM a coordenadas de canvas
-        const clickedNodeId = network.getNodeAt({ x, y });
-        // let clickedNodeId = null;
-        // const canvasPosition = network.DOMtoCanvas({ x, y });
-        
         if (clickedNodeId) {
           if (selectedNodeRef.current === null) {
             selectedNodeRef.current = clickedNodeId;
@@ -144,17 +155,18 @@ const Grafo = () => {
             const toId = clickedNodeId;
 
             if (fromId !== toId) {
-              const existingEdge = edges.get().find(edge => 
-                (edge.from === fromId && edge.to === toId) || 
-                (edge.from === toId && edge.to === fromId)
-              );
+              // const existingEdge = edges.get().find(edge => 
+              //   (edge.from === fromId && edge.to === toId)
+              //   // || (edge.from === toId && edge.to === fromId)
+              // );
 
-              if (!existingEdge) {
-                edges.add({ from: fromId, to: toId });
-                console.log(`Arista creada entre ${fromId} y ${toId}`);
-              } else {
-                console.log(`Ya existe una arista entre ${fromId} y ${toId}`);
-              }
+              // if (!existingEdge) {
+              //   edges.add({ from: fromId, to: toId });
+              //   console.log(`Arista creada entre ${fromId} y ${toId}`);
+              // } else {
+              //   console.log(`Ya existe una arista entre ${fromId} y ${toId}`);
+              // }
+              directedAddEdgeIfNotExists(fromId, toId);
             }
 
             // Restaurar color del nodo previamente seleccionado
@@ -192,6 +204,7 @@ const Grafo = () => {
         }
       }
     };
+
     containerRef.current.addEventListener('contextmenu', (e) => {
       e.preventDefault();
     })
@@ -214,6 +227,7 @@ const Grafo = () => {
       if (networkRef.current) {
         networkRef.current.destroy();
       }
+      setIsNetworkReady(false);
     }
 
   }, []);
@@ -229,24 +243,24 @@ const Grafo = () => {
     }
   };
 
-  const clearSelection = () => {
-    if (selectedNodeRef.current !== null && networkRef.current) {
-      const nodes = networkRef.current.body.data.nodes;
-      nodes.update({
-        id: selectedNodeRef.current,
-        color: {
-          border: "#2B7CE9",
-          background: "#97C2FC",
-          highlight: {
-            border: "#2B7CE9",
-            background: "#D2E5FF"
-          }
-        }
-      });
-      selectedNodeRef.current = null;
-      console.log("Selección cancelada");
-    }
-  };
+  // const clearSelection = () => {
+  //   if (selectedNodeRef.current !== null && networkRef.current) {
+  //     const nodes = networkRef.current.body.data.nodes;
+  //     nodes.update({
+  //       id: selectedNodeRef.current,
+  //       color: {
+  //         border: "#2B7CE9",
+  //         background: "#97C2FC",
+  //         highlight: {
+  //           border: "#2B7CE9",
+  //           background: "#D2E5FF"
+  //         }
+  //       }
+  //     });
+  //     selectedNodeRef.current = null;
+  //     console.log("Selección cancelada");
+  //   }
+  // };
 
   const fitView = () => {
     if (networkRef.current) {
@@ -271,8 +285,8 @@ const Grafo = () => {
       
       // Verificar si la arista ya existe
       const existingEdge = edges.get().find(edge => 
-        (edge.from === fromId && edge.to === toId) || 
-        (edge.from === toId && edge.to === fromId)
+        (edge.from === fromId && edge.to === toId) 
+        // || (edge.from === toId && edge.to === fromId)
       );
       
       if (!existingEdge) {
@@ -287,6 +301,22 @@ const Grafo = () => {
   return (
     <div className="w-full">
       <div className="mb-4 flex gap-2 flex-wrap">
+        {isNetworkReady && (
+          <GrafoIO
+            nodes={networkRef.current.body.data.nodes}
+            edges={networkRef.current.body.data.edges}
+            onImport={(data) => {
+              const nodes = networkRef.current.body.data.nodes;
+              const edges = networkRef.current.body.data.edges;
+              nodes.clear();
+              edges.clear();
+              nodes.add(data.nodes);
+              edges.add(data.edges);
+              networkRef.current.fit(); // centra el grafo importado
+            }}
+          >
+          </GrafoIO>
+        )}
         <button 
           onClick={clearGraph}
           className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
@@ -305,12 +335,14 @@ const Grafo = () => {
         >
           Agregar Arista Aleatoria
         </button>
+        {/*
         <button 
           onClick={clearSelection}
           className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors"
         >
           Cancelar Selección
         </button>
+        */}
       </div>
       
       <div className="w-full h-[500px] bg-white rounded shadow-md p-4 border-2 border-gray-300">
@@ -327,5 +359,6 @@ const Grafo = () => {
     </div>
   );
 };
+
 
 export default Grafo;
