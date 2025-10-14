@@ -9,26 +9,33 @@ import GrafoIO from './GrafoIO';
 const Grafo = () => {
   const containerRef = useRef(null);
   const networkRef = useRef(null);
-  const nodeCounterRef = useRef(6); // Empezar desde 6 ya que tenemos 5 nodos iniciales
+  const nodeCounterRef = useRef(1);
   const selectedNodeRef = useRef(null);
   const [isNetworkReady, setIsNetworkReady] = useState(false);
+  const [isDirected, setIsDirected] = useState(true);
+  const [isWeighted, setIsWeighted] = useState(false);
 
   useEffect(() => {
     // Inicializar nodos y aristas
-    const nodes = new DataSet([
-      { id: 1, label: "Nodo 1" },
-      { id: 2, label: "Nodo 2" },
-      { id: 3, label: "Nodo 3" },
-      { id: 4, label: "Nodo 4" },
-      { id: 5, label: "Nodo 5" },
-    ]);
+    // const nodes = new DataSet([
+    //   { id: 1, label: "Nodo 1" },
+    //   { id: 2, label: "Nodo 2" },
+    //   { id: 3, label: "Nodo 3" },
+    //   { id: 4, label: "Nodo 4" },
+    //   { id: 5, label: "Nodo 5" },
+    // ]);
 
-    const edges = new DataSet([
-      { from: 1, to: 2 },
-      { from: 1, to: 3 },
-      { from: 2, to: 4 },
-      { from: 2, to: 5 },
-    ]);
+    // const edges = new DataSet([
+    //   { from: 1, to: 2 },
+    //   { from: 1, to: 3 },
+    //   { from: 2, to: 4 },
+    //   { from: 2, to: 5 },
+    // ]);
+    const nodes = new DataSet();
+    const edges = new DataSet();
+    
+    // Resetear el contador cuando se reinicializa el grafo
+    nodeCounterRef.current = 1;
 
     const data = { nodes, edges };
 
@@ -47,8 +54,26 @@ const Grafo = () => {
         }
       },
       edges: {
-        arrows: 'to',
+        arrows: {
+          "to" : {
+            "enabled": isDirected ? true : false
+          }
+        },
         color: '#888',
+        font: {
+          color: '#000',
+          size: 12,
+          background: 'white',
+          strokeWidth: 2,
+          strokeColor: 'white'
+        },
+        labelHighlightBold: false,
+        smooth: {
+          type: 'continuous',
+          forceDirection: 'none',
+          roundness: 0.1
+        },
+        selfReference: {size:20}
       },
       layout: {
         hierarchical: false,
@@ -79,14 +104,22 @@ const Grafo = () => {
       return networkRef.current.getNodeAt({x,y});
     }
 
-    const directedAddEdgeIfNotExists = (from, to) => {
+    const AddEdgeIfNotExists = (from, to) => {
       const existingEdge = edges.get().find(
         (edge) =>
           (edge.from === from && edge.to === to)
+          || (!isDirected && edge.from == to && edge.to == from)
       );
 
       if (!existingEdge) {
-        edges.add({ from, to });
+        const newEdge = {from, to};
+
+        if(isWeighted) {
+          const weight = prompt(`Introduce el peso de la arista ${from} -> ${to}:`, "1");
+          newEdge.label = weight || "1";
+        }
+
+        edges.add(newEdge);
         console.log(`Arista creada de ${from} a ${to}`);
       } else {
         console.log(`Ya existe una arista de ${from} a ${to}`);
@@ -129,6 +162,7 @@ const Grafo = () => {
 
         if(clickedNodeId) {
           nodes.remove({id:clickedNodeId});
+          // No decrementar el contador, mantener secuencia incremental
           console.log(`Nodo ${clickedNodeId} eliminado con clic central.`);
         }
 
@@ -166,7 +200,7 @@ const Grafo = () => {
               // } else {
               //   console.log(`Ya existe una arista entre ${fromId} y ${toId}`);
               // }
-              directedAddEdgeIfNotExists(fromId, toId);
+              AddEdgeIfNotExists(fromId, toId);
             }
 
             // Restaurar color del nodo previamente seleccionado
@@ -230,7 +264,7 @@ const Grafo = () => {
       setIsNetworkReady(false);
     }
 
-  }, []);
+  }, [isDirected, isWeighted]);
 
   const clearGraph = () => {
     if (networkRef.current) {
@@ -268,43 +302,46 @@ const Grafo = () => {
     }
   };
 
-  const addRandomEdge = () => {
-    if (networkRef.current) {
-      const nodes = networkRef.current.body.data.nodes;
-      const edges = networkRef.current.body.data.edges;
-      const nodeIds = nodes.getIds();
-      if (nodeIds.length < 2) return;
+  // const addRandomEdge = () => {
+  //   if (networkRef.current) {
+  //     const nodes = networkRef.current.body.data.nodes;
+  //     const edges = networkRef.current.body.data.edges;
+  //     const nodeIds = nodes.getIds();
+  //     if (nodeIds.length < 2) return;
       
-      const fromId = nodeIds[Math.floor(Math.random() * nodeIds.length)]; // Tomamos un numero aleatorio y tomamos por defecto
-      let toId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+  //     const fromId = nodeIds[Math.floor(Math.random() * nodeIds.length)]; // Tomamos un numero aleatorio y tomamos por defecto
+  //     let toId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
       
-      // Evitar self-loops, susceptible a cambio
-      while (toId === fromId && nodeIds.length > 1) {
-        toId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
-      }
+  //     // Evitar self-loops, susceptible a cambio
+  //     while (toId === fromId && nodeIds.length > 1) {
+  //       toId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+  //     }
       
-      // Verificar si la arista ya existe
-      const existingEdge = edges.get().find(edge => 
-        (edge.from === fromId && edge.to === toId) 
-        // || (edge.from === toId && edge.to === fromId)
-      );
+  //     // Verificar si la arista ya existe
+  //     const existingEdge = edges.get().find(edge => 
+  //       (edge.from === fromId && edge.to === toId) 
+  //       // || (edge.from === toId && edge.to === fromId)
+  //     );
       
-      if (!existingEdge) {
-        edges.add({
-          from: fromId,
-          to: toId
-        });
-      }
-    }
-  };
+  //     if (!existingEdge) {
+  //       edges.add({
+  //         from: fromId,
+  //         to: toId
+  //       });
+  //     }
+  //   }
+  // };
 
   return (
     <div className="w-full">
       <div className="mb-4 flex gap-2 flex-wrap">
         {isNetworkReady && (
           <GrafoIO
-            nodes={networkRef.current.body.data.nodes}
-            edges={networkRef.current.body.data.edges}
+            // nodes={networkRef.current.body.data.nodes}
+            // edges={networkRef.current.body.data.edges}
+            isWeighted={isWeighted}
+            isDirected={isDirected}
+            networkRef={networkRef}
             onImport={(data) => {
               const nodes = networkRef.current.body.data.nodes;
               const edges = networkRef.current.body.data.edges;
@@ -313,10 +350,31 @@ const Grafo = () => {
               nodes.add(data.nodes);
               edges.add(data.edges);
               networkRef.current.fit(); // centra el grafo importado
+
+              const maxId = Math.max(...data.nodes.map(n => n.id), 0);
+              nodeCounterRef.current = maxId + 1;
             }}
           >
           </GrafoIO>
         )}
+        <label className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isDirected}
+            onChange={() => setIsDirected(!isDirected)}
+            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+          />
+          Dirigido
+        </label>
+        <label className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isWeighted}
+            onChange={() => setIsWeighted(!isWeighted)}
+            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+          />
+          Ponderado
+        </label>
         <button 
           onClick={clearGraph}
           className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
@@ -329,12 +387,15 @@ const Grafo = () => {
         >
           Centrar Vista
         </button>
-        <button 
-          onClick={addRandomEdge}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-        >
-          Agregar Arista Aleatoria
-        </button>
+        {/* {
+          <button 
+            onClick={addRandomEdge}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+          >
+            Agregar Arista Aleatoria
+          </button>
+        } */
+        }
         {/*
         <button 
           onClick={clearSelection}
