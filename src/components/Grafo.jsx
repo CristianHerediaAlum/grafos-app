@@ -33,7 +33,7 @@ const Grafo = () => {
     // ]);
     const nodes = new DataSet();
     const edges = new DataSet();
-    
+
     // Resetear el contador cuando se reinicializa el grafo
     nodeCounterRef.current = 1;
 
@@ -55,7 +55,7 @@ const Grafo = () => {
       },
       edges: {
         arrows: {
-          "to" : {
+          "to": {
             "enabled": isDirected ? true : false
           }
         },
@@ -73,7 +73,7 @@ const Grafo = () => {
           forceDirection: 'none',
           roundness: 0.1
         },
-        selfReference: {size:20}
+        selfReference: { size: 20 }
       },
       layout: {
         hierarchical: false,
@@ -101,7 +101,7 @@ const Grafo = () => {
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
 
-      return networkRef.current.getNodeAt({x,y});
+      return networkRef.current.getNodeAt({ x, y });
     }
 
     const AddEdgeIfNotExists = (from, to) => {
@@ -112,9 +112,9 @@ const Grafo = () => {
       );
 
       if (!existingEdge) {
-        const newEdge = {from, to};
+        const newEdge = { from, to };
 
-        if(isWeighted) {
+        if (isWeighted) {
           const weight = prompt(`Introduce el peso de la arista ${from} -> ${to}:`, "1");
           newEdge.label = weight || "1";
         }
@@ -130,7 +130,7 @@ const Grafo = () => {
     const handleClick = (event) => {
       const { pointer, event: originalEvent } = event;
       const { canvas } = pointer;
-      
+
       // Solo crear nodo si no se hizo clic en un nodo existente y es clic izquierdo
       if (event.nodes.length === 0) {
         const nodeId = nodeCounterRef.current;
@@ -141,10 +141,10 @@ const Grafo = () => {
           y: canvas.y,
           physics: false // Fijar la posición inicial
         };
-        
+
         nodes.add(newNode);
         nodeCounterRef.current += 1;
-        
+
         // Después de un momento, habilitar la física para que el nodo se mueva naturalmente
         setTimeout(() => {
           nodes.update({
@@ -158,10 +158,21 @@ const Grafo = () => {
     const handleMouseDown = (e) => {
       e.preventDefault();
       const clickedNodeId = getClickedNodeId(e);
-      if(e.button === 1) { // Botón central
+      
+      if (e.button === 1) { // Botón central
+        // Primero verificar si hay una arista en la posición del clic
+        const rect = containerRef.current.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const clickedEdgeId = networkRef.current.getEdgeAt({ x, y });
 
-        if(clickedNodeId) {
-          nodes.remove({id:clickedNodeId});
+        if (clickedEdgeId) {
+          // Si hay una arista, eliminarla
+          edges.remove({ id: clickedEdgeId });
+          console.log(`Arista ${clickedEdgeId} eliminada con clic central.`);
+        } else if (clickedNodeId) {
+          // Si no hay arista pero hay un nodo, eliminar el nodo
+          nodes.remove({ id: clickedNodeId });
           // No decrementar el contador, mantener secuencia incremental
           console.log(`Nodo ${clickedNodeId} eliminado con clic central.`);
         }
@@ -308,21 +319,21 @@ const Grafo = () => {
   //     const edges = networkRef.current.body.data.edges;
   //     const nodeIds = nodes.getIds();
   //     if (nodeIds.length < 2) return;
-      
+
   //     const fromId = nodeIds[Math.floor(Math.random() * nodeIds.length)]; // Tomamos un numero aleatorio y tomamos por defecto
   //     let toId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
-      
+
   //     // Evitar self-loops, susceptible a cambio
   //     while (toId === fromId && nodeIds.length > 1) {
   //       toId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
   //     }
-      
+
   //     // Verificar si la arista ya existe
   //     const existingEdge = edges.get().find(edge => 
   //       (edge.from === fromId && edge.to === toId) 
   //       // || (edge.from === toId && edge.to === fromId)
   //     );
-      
+
   //     if (!existingEdge) {
   //       edges.add({
   //         from: fromId,
@@ -375,13 +386,13 @@ const Grafo = () => {
           />
           Ponderado
         </label>
-        <button 
+        <button
           onClick={clearGraph}
           className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
         >
           Limpiar Grafo
         </button>
-        <button 
+        <button
           onClick={fitView}
           className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
         >
@@ -405,17 +416,18 @@ const Grafo = () => {
         </button>
         */}
       </div>
-      
+
       <div className="w-full h-[500px] bg-white rounded shadow-md p-4 border-2 border-gray-300">
         <div ref={containerRef} className="w-full h-full cursor-crosshair" />
       </div>
-      
+
       <div className="mt-2 text-sm text-gray-600 space-y-1">
         <p><strong>Clic izquierdo</strong> en área vacía: crear nuevo nodo</p>
         <p><strong>Clic derecho</strong> en nodo: seleccionar para conectar (se pone amarillo)</p>
         <p><strong>Clic derecho</strong> en otro nodo: crear arista entre ambos</p>
         <p><strong>Clic derecho</strong> en área vacía: cancelar selección</p>
         <p><strong>Clic central</strong> en nodo: eliminar nodo</p>
+        <p><strong>Clic central</strong> en arista: eliminar arista</p>
       </div>
     </div>
   );

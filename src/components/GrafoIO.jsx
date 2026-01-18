@@ -1,7 +1,23 @@
-import React, { useRef } from "react";
+import React, { useRef, useState, useEffect } from "react";
 
-const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirected}) => {
+const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirected }) => {
     const fileInputRef = useRef(null);
+    const [isExportOpen, setIsExportOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+    // Cerrar dropdown al hacer clic fuera
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsExportOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, []);
 
     // Primero formateamos los nodos y aristas
 
@@ -10,10 +26,10 @@ const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirecte
 
     const sanitizeEdges = (edgesArray) => {
         if (isWeighted) {
-            return edgesArray.map(e => ({ 
-                from: e.from, 
-                to: e.to, 
-                weight: e.label || "1" 
+            return edgesArray.map(e => ({
+                from: e.from,
+                to: e.to,
+                weight: e.label || "1"
             }));
         } else {
             return edgesArray.map(e => ({ from: e.from, to: e.to }));
@@ -33,7 +49,7 @@ const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirecte
             for (const edge of processedEdges) {
                 const pair1 = `${edge.from}-${edge.to}`;
                 const pair2 = `${edge.to}-${edge.from}`;
-                
+
                 if (!seenPairs.has(pair1) && !seenPairs.has(pair2)) {
                     uniqueEdges.push(edge);
                     seenPairs.add(pair1);
@@ -46,7 +62,7 @@ const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirecte
         // 2. Manejar ponderado/no ponderado
         return processedEdges.map(edge => {
             const processedEdge = { from: edge.from, to: edge.to };
-            
+
             if (isWeighted) {
                 // Si el grafo actual es ponderado, agregar peso
                 if (edge.weight) {
@@ -59,7 +75,7 @@ const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirecte
                 }
             }
             // Si el grafo actual es NO ponderado, no agregar label (pesos se ignoran)
-            
+
             return processedEdge;
         });
     };
@@ -70,15 +86,15 @@ const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirecte
         // Obtener las referencias actuales directamente desde la red
         const currentNodes = networkRef.current?.body?.data?.nodes;
         const currentEdges = networkRef.current?.body?.data?.edges;
-        
+
         if (!currentNodes || !currentEdges) {
             alert("Error: No se pueden obtener los datos del grafo");
             return;
         }
-        
+
         console.log("Nodos raw:", currentNodes.get());
         console.log("Aristas raw:", currentEdges.get());
-        
+
         const graph = {
             nodes: sanitizeNodes(currentNodes.get()),
             edges: sanitizeEdges(currentEdges.get()),
@@ -97,6 +113,22 @@ const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirecte
         URL.revokeObjectURL(url);
     };
 
+    // Funciones de exportación con cierre automático del dropdown
+    const handleExportJSON = () => {
+        exportJSON();
+        setIsExportOpen(false);
+    };
+
+    const handleExportTXTList = () => {
+        exportTXTList();
+        setIsExportOpen(false);
+    };
+
+    const handleExportTXTMatrix = () => {
+        exportTXTMatrix();
+        setIsExportOpen(false);
+    };
+
     // Importar desde JSON
     const importJSON = () => {
         fileInputRef.current.click();
@@ -110,7 +142,7 @@ const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirecte
         reader.onload = (e) => {
             try {
                 const data = JSON.parse(e.target.result);
-                
+
                 // Validar que el JSON tenga la estructura correcta
                 if (!data.nodes || !data.edges || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
                     alert("Formato de archivo JSON inválido. Debe contener 'nodes' y 'edges' como arrays.");
@@ -118,7 +150,7 @@ const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirecte
                 }
 
                 // Validar estructura de nodos
-                const isValidNodes = data.nodes.every(node => 
+                const isValidNodes = data.nodes.every(node =>
                     node.hasOwnProperty('id') && node.hasOwnProperty('label')
                 );
 
@@ -131,8 +163,8 @@ const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirecte
 
                 if (!isValidNodes || !isValidEdges) {
                     const nodeMessage = "Los nodos deben tener 'id' y 'label'";
-                    const edgeMessage = "las aristas deben tener 'from' y 'to'" + 
-                                       (isWeighted ? " (el 'weight' para el peso es opcional)" : "");
+                    const edgeMessage = "las aristas deben tener 'from' y 'to'" +
+                        (isWeighted ? " (el 'weight' para el peso es opcional)" : "");
                     alert(`Estructura de datos inválida. ${nodeMessage}, ${edgeMessage}.`);
                     return;
                 }
@@ -159,7 +191,7 @@ const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirecte
                         adjustmentMessage += `\n• ${edgesWithWeight} pesos de aristas fueron ignorados (grafo no ponderado)`;
                     }
                 }
-                
+
                 console.log(adjustmentMessage);
                 if (adjustmentMessage !== "Grafo importado exitosamente") {
                     alert(adjustmentMessage);
@@ -168,7 +200,7 @@ const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirecte
                 // Llamar a la función de importación del componente padre
                 onImport(processedData);
                 console.log("Grafo importado exitosamente");
-                
+
             } catch (error) {
                 alert("Error al parsear el archivo JSON: " + error.message);
             }
@@ -179,23 +211,521 @@ const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirecte
         event.target.value = '';
     };
 
+    // Importar grafo desde TXT (lista no ponderada)
+    const importTXTListNotWeighted = () => {
+        if (isWeighted) {
+            alert("Se está usando una opción incorrecta de importación");
+            return;
+        }
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.txt';
+
+        input.onchange = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const lines = e.target.result
+                        .split(/\r?\n/)
+                        .map(line => line.trim())
+                        .filter(line => line.length > 0);
+
+                    if (lines.length === 0) {
+                        alert("El archivo está vacío.");
+                        return;
+                    }
+
+                    // Leer n (pero NO limitarse a 0..n-1)
+                    const n = parseInt(lines[0]);
+
+                    if (n <= 0 || isNaN(n)) {
+                        alert("n no válido");
+                        return;
+                    }
+
+                    // Conjunto de nodos detectados realmente
+                    const nodeIds = new Set();
+
+                    const edges = [];
+                    const edgeSet = new Set();
+
+                    for (let i = 1; i < lines.length; i++) {
+                        const line = lines[i];
+
+                        const colonIndex = line.indexOf(':');
+                        if (colonIndex === -1) continue;
+
+                        const left = line.substring(0, colonIndex).trim();
+                        const right = line.substring(colonIndex + 1).trim();
+
+                        const from = parseInt(left);
+                        if (isNaN(from)) continue;
+
+                        nodeIds.add(from);
+
+                        if (!right) continue;
+
+                        const neighbors = right
+                            .split(/\s+/)
+                            .map(Number)
+                            .filter(x => !isNaN(x));
+
+                        neighbors.forEach(to => {
+                            nodeIds.add(to);
+
+                            const key = `${from}-${to}`;
+                            const revKey = `${to}-${from}`;
+
+                            if (isDirected) {
+                                if (!edgeSet.has(key)) {
+                                    edges.push({ from, to });
+                                    edgeSet.add(key);
+                                }
+                            } else {
+                                if (!edgeSet.has(key) && !edgeSet.has(revKey)) {
+                                    edges.push({ from, to });
+                                    edgeSet.add(key);
+                                    edgeSet.add(revKey);
+                                }
+                            }
+                        });
+                    }
+
+                    // Crear nodos REALES detectados
+                    const nodes = [...nodeIds].sort((a, b) => a - b).map(id => ({
+                        id,
+                        label: "Nodo " + id
+                    }));
+
+                    const graphData = {
+                        nodes,
+                        edges: processEdgesForCurrentConfig(edges)
+                    };
+
+                    console.log("Grafo importado desde TXT:", graphData);
+                    onImport(graphData);
+
+                } catch (error) {
+                    console.error("Error al procesar archivo TXT:", error);
+                    alert("Error al leer el archivo TXT: " + error.message);
+                }
+            };
+
+            reader.readAsText(file);
+        };
+
+        input.click();
+    };
+
+    const importTXTListWeighted = () => {
+        if (!isWeighted) {
+            alert("Se está usando una opción incorrecta de importación");
+            return;
+        }
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.txt';
+
+        input.onchange = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const lines = e.target.result
+                        .split(/\r?\n/)
+                        .map(line => line.trim())
+                        .filter(line => line.length > 0);
+
+                    if (lines.length === 0) {
+                        alert("El archivo está vacío.");
+                        return;
+                    }
+
+                    // Leer n (pero NO limitarse a 0..n-1)
+                    const n = parseInt(lines[0]);
+
+                    if (n <= 0 || isNaN(n)) {
+                        alert("n no válido");
+                        return;
+                    }
+
+                    // Conjunto de nodos detectados realmente
+                    const nodeIds = new Set();
+
+                    const edges = [];
+                    const edgeSet = new Set();
+
+                    for (let i = 1; i < lines.length; i++) {
+                        const line = lines[i];
+
+                        const colonIndex = line.indexOf(':');
+                        if (colonIndex === -1) continue;
+
+                        const left = line.substring(0, colonIndex).trim();
+                        const right = line.substring(colonIndex + 1).trim();
+
+                        const from = parseInt(left);
+                        if (isNaN(from)) continue;
+
+                        nodeIds.add(from);
+
+                        if (!right) continue;
+
+                        const tokens = right.split(/\s+/); // Ejemplo: ["2", "30", "3", "10"] -> vecino peso vecino peso...
+
+                        for (let t = 0; t < tokens.length; t += 2) {
+                            const toToken = tokens[t];
+                            const weightToken = tokens[t + 1];
+
+                            const to = parseInt(toToken);
+                            if (isNaN(to)) continue;
+
+                            let weight = 1;
+                            if (weightToken !== undefined) {
+                                const parsed = Number(weightToken);
+                                if (!Number.isNaN(parsed)) weight = parsed;
+                            }
+
+                            nodeIds.add(to);
+
+                            const key = `${from}-${to}`;
+                            const revKey = `${to}-${from}`;
+
+                            if (isDirected) {
+                                if (!edgeSet.has(key)) {
+                                    edges.push({ from, to,/* weight: weight,*/ label: String(weight) }); // Peso en propiedad weight y label por vis-network
+                                    edgeSet.add(key);
+                                }
+                            } else {
+                                if (!edgeSet.has(key) && !edgeSet.has(revKey)) {
+                                    edges.push({ from, to, /*weight: weight,*/ label: String(weight) });
+                                    edgeSet.add(key);
+                                    edgeSet.add(revKey);
+                                }
+                            }
+                        }
+                    }
+
+                    // Crear nodos REALES detectados
+                    const nodes = [...nodeIds].sort((a, b) => a - b).map(id => ({
+                        id,
+                        label: "Nodo " + id
+                    }));
+
+                    // Para grafos ponderados, mantener los pesos sin procesamiento adicional
+                    // const finalEdges = edges.map(edge => ({
+                    //     from: edge.from,
+                    //     to: edge.to,
+                    //     label: String(edge.weight) // vis-network usa 'label' para mostrar texto en las aristas
+                    // }));
+
+                    const graphData = {
+                        nodes,
+                        edges: /*finalEdges */ edges
+                    };
+
+                    console.log("Grafo importado desde TXT:", graphData);
+                    onImport(graphData);
+                    // alert("Grafo ponderado importado exitosamente desde TXT");
+
+                } catch (error) {
+                    console.error("Error al procesar archivo TXT:", error);
+                    alert("Error al leer el archivo TXT: " + error.message);
+                }
+            };
+
+            reader.readAsText(file);
+        };
+
+        input.click();
+
+    };
+
+    // Importar matriz de adyacencia ponderada desde TXT
+    const importTXTMatrixWeighted = () => {
+        if (!isWeighted) {
+            alert("Se está usando una opción incorrecta de importación. Esta función es para grafos ponderados.");
+            return;
+        }
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.txt';
+
+        input.onchange = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const lines = e.target.result
+                        .split(/\r?\n/)
+                        .map(line => line.trim())
+                        .filter(line => line.length > 0);
+
+                    if (lines.length === 0) {
+                        alert("El archivo está vacío.");
+                        return;
+                    }
+
+                    // Leer n (número de nodos)
+                    const n = parseInt(lines[0]);
+
+                    if (n <= 0 || isNaN(n)) {
+                        alert("Número de nodos inválido");
+                        return;
+                    }
+
+                    if (lines.length < n + 1) {
+                        alert(`El archivo debe contener ${n + 1} líneas (1 para n y ${n} para la matriz)`);
+                        return;
+                    }
+
+                    // Crear nodos (asumiendo que los IDs van de 1 a n)
+                    const nodes = [];
+                    for (let i = 1; i <= n; i++) {
+                        nodes.push({
+                            id: i,
+                            label: "Nodo " + i
+                        });
+                    }
+
+                    // Leer matriz y crear aristas
+                    const edges = [];
+                    const edgeSet = new Set();
+                    const INF = 4294967295; // Valor que representa "no hay arista"
+
+                    for (let i = 1; i <= n; i++) {
+                        const line = lines[i];
+                        // Dividir por espacios y filtrar valores vacíos
+                        const values = line.split(/\s+/).filter(val => val.length > 0);
+
+                        if (values.length !== n) {
+                            alert(`La fila ${i} debe contener exactamente ${n} valores. Se encontraron ${values.length}.`);
+                            return;
+                        }
+
+                        for (let j = 0; j < n; j++) {
+                            const weight = parseInt(values[j]);
+                            
+                            if (isNaN(weight)) {
+                                alert(`Valor inválido en la posición [${i-1}][${j}]: "${values[j]}".`);
+                                return;
+                            }
+
+                            // Si no es INF (hay arista) y no es la diagonal (evitar self-loops a menos que sea necesario)
+                            if (weight !== INF) {
+                                const from = i; // Ajustar índice (líneas empiezan en 1, IDs de nodos empiezan en 1)
+                                const to = j + 1; // Los índices j van de 0 a n-1, pero los IDs van de 1 a n
+
+                                const key = `${from}-${to}`;
+                                const revKey = `${to}-${from}`;
+
+                                if (isDirected) {
+                                    // Para grafos dirigidos, agregar todas las aristas
+                                    if (!edgeSet.has(key)) {
+                                        edges.push({ from, to, label: String(weight) });
+                                        edgeSet.add(key);
+                                    }
+                                } else {
+                                    // Para grafos no dirigidos, evitar duplicados
+                                    if (!edgeSet.has(key) && !edgeSet.has(revKey)) {
+                                        edges.push({ from, to, label: String(weight) });
+                                        edgeSet.add(key);
+                                        edgeSet.add(revKey);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    const graphData = {
+                        nodes,
+                        edges
+                    };
+
+                    console.log("Grafo importado desde matriz TXT:", graphData);
+                    onImport(graphData);
+                    
+                    // let message = "Grafo importado exitosamente desde matriz de adyacencia";
+                    // if (!isDirected) {
+                    //     message += "\n• Se procesó como grafo no dirigido (aristas duplicadas eliminadas)";
+                    // }
+                    // alert(message);
+
+                } catch (error) {
+                    console.error("Error al procesar archivo TXT:", error);
+                    alert("Error al leer el archivo TXT: " + error.message);
+                }
+            };
+
+            reader.readAsText(file);
+        };
+
+        input.click();
+    };
+
+    // Exportar lista de adyacencia a TXT
+    const exportTXTList = () => {
+        const currentNodes = networkRef.current?.body?.data?.nodes;
+        const currentEdges = networkRef.current?.body?.data?.edges;
+
+        if (!currentNodes || !currentEdges) {
+            alert("Error: No se pueden obtener los datos del grafo");
+            return;
+        }
+
+        const nodes = sanitizeNodes(currentNodes.get());
+        const edges = sanitizeEdges(currentEdges.get());
+
+        // Crear estructura de adyacencia
+        const adjacencyList = new Map();
+        nodes.forEach(n => adjacencyList.set(n.id, []));
+
+        edges.forEach(edge => {
+            if (isWeighted) {
+                adjacencyList.get(edge.from)?.push(`${edge.to} ${edge.weight}`);
+                if (!isDirected) adjacencyList.get(edge.to)?.push(`${edge.from} ${edge.weight}`);
+            } else {
+                adjacencyList.get(edge.from)?.push(`${edge.to}`);
+                if (!isDirected) adjacencyList.get(edge.to)?.push(`${edge.from}`);
+            }
+        });
+
+        // Convertir a texto
+        let content = `${nodes.length}\n`;
+        nodes.forEach(n => {
+            const connections = adjacencyList.get(n.id);
+            content += `${n.id}: ${connections.join(" ")}\n`;
+        });
+
+        // Descargar el archivo
+        const blob = new Blob([content], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "grafo.txt";
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    // Exportar matriz de adyacencia a TXT
+    const exportTXTMatrix = () => {
+        const currentNodes = networkRef.current?.body?.data?.nodes;
+        const currentEdges = networkRef.current?.body?.data?.edges;
+
+        if (!currentNodes || !currentEdges) {
+            alert("Error: No se pueden obtener los datos del grafo");
+            return;
+        }
+
+        const nodes = sanitizeNodes(currentNodes.get());
+        const edges = sanitizeEdges(currentEdges.get());
+
+        const n = nodes.length;
+        const INF = 4294967295;
+
+        // Crear un mapa de id → índice
+        const idToIndex = new Map(nodes.map((node, index) => [node.id, index]));
+
+        // Inicializamos matriz NxN con "infinito"
+        const matrix = Array.from({ length: n }, () => Array(n).fill(INF));
+
+        // Rellenamos la matriz usando los índices mapeados
+        edges.forEach(edge => {
+            const fromIndex = idToIndex.get(edge.from);
+            const toIndex = idToIndex.get(edge.to);
+
+            // Evitar errores si el edge tiene nodos que no existen
+            if (fromIndex === undefined || toIndex === undefined) return;
+
+            if (isWeighted) {
+                const weight = parseInt(edge.weight || edge.label || "1", 10);
+                matrix[fromIndex][toIndex] = weight;
+                if (!isDirected) matrix[toIndex][fromIndex] = weight;
+            } else {
+                matrix[fromIndex][toIndex] = 1;
+                if (!isDirected) matrix[toIndex][fromIndex] = 1;
+            }
+        });
+
+        // Convertimos la matriz a texto
+        let content = `${n}\n`;
+        matrix.forEach(row => {
+            content +=
+                // "  " +
+                row.map(val => String(val).padStart(10, " ")).join(" ") +
+                "\n";
+        });
+
+        // Descargar archivo
+        const blob = new Blob([content], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "grafo.txt";
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+
+
+
     return (
         <div className="flex gap-2">
+            {/* Dropdown de exportación */}
+            <div className="relative" ref={dropdownRef}>
+                <button
+                    onClick={() => setIsExportOpen(!isExportOpen)}
+                    className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors flex items-center gap-2"
+                >
+                    Exportar
+                    <svg
+                        className={`w-4 h-4 transition-transform ${isExportOpen ? 'rotate-180' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
 
-            <button
-                onClick={exportJSON}
-                className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors"
-            >
-                Exportar JSON
-            </button>
-            
+                {isExportOpen && (
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 min-w-full">
+                        <button
+                            onClick={handleExportJSON}
+                            className="w-full px-4 py-2 text-left text-gray-700 hover:bg-purple-50 hover:text-purple-600 transition-colors first:rounded-t-md"
+                        >
+                            JSON
+                        </button>
+                        <button
+                            onClick={handleExportTXTList}
+                            className="w-full px-4 py-2 text-left text-gray-700 hover:bg-purple-50 hover:text-purple-600 transition-colors border-t border-gray-100"
+                        >
+                            TXT Lista
+                        </button>
+                        <button
+                            onClick={handleExportTXTMatrix}
+                            className="w-full px-4 py-2 text-left text-gray-700 hover:bg-purple-50 hover:text-purple-600 transition-colors border-t border-gray-100 last:rounded-b-md"
+                        >
+                            TXT Matriz
+                        </button>
+                    </div>
+                )}
+            </div>
+
             <button
                 onClick={importJSON}
                 className="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition-colors"
             >
                 Importar JSON
             </button>
-            
+
             <input
                 ref={fileInputRef}
                 type="file"
@@ -203,6 +733,28 @@ const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirecte
                 onChange={handleFileChange}
                 style={{ display: 'none' }}
             />
+
+            <button
+                onClick={importTXTListNotWeighted}
+                className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors"
+            >
+                Importar TXT (lista no ponderada)
+            </button>
+
+            <button
+                onClick={importTXTListWeighted}
+                className="px-4 py-2 bg-pink-500 text-white rounded hover:bg-pink-600 transition-colors"
+            >
+                Importar TXT (lista ponderada)
+            </button>
+
+            <button
+                onClick={importTXTMatrixWeighted}
+                className="px-4 py-2 bg-teal-500 text-white rounded hover:bg-teal-600 transition-colors"
+            >
+                Importar TXT (matriz ponderada)
+            </button>
+
         </div>
     )
 
