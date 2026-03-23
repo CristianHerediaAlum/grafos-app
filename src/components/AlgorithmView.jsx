@@ -5,8 +5,20 @@ import { Network } from "vis-network";
 import { DataSet } from "vis-data";
 import CodeViewer from "./codeViewer";
 import { dijkstraSteps, dijkstraCppCode } from "../algorithms/dijkstraGenerator";
+import { floydSteps, floydCppCode } from "../algorithms/floydGenerator";
 
-const AlgorithmView = ({ graphData, graphOptions, onBack }) => {
+const ALGORITHM_MAP = {
+  dijkstra: {
+    code: dijkstraCppCode,
+    createSteps: (graphData, originNodeId) => Array.from(dijkstraSteps(graphData, originNodeId))
+  },
+  floyd: {
+    code: floydCppCode,
+    createSteps: (graphData) => Array.from(floydSteps(graphData))
+  }
+};
+
+const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onBack }) => {
 
   const containerRef = useRef(null);
   const networkRef = useRef(null);
@@ -41,7 +53,8 @@ const AlgorithmView = ({ graphData, graphOptions, onBack }) => {
 
     networkRef.current = network;
 
-    const generatedSteps = Array.from(dijkstraSteps(graphData, graphData.nodes[0].id));
+    const selectedAlgorithm = ALGORITHM_MAP[algorithmKey] ?? ALGORITHM_MAP.dijkstra;
+    const generatedSteps = selectedAlgorithm.createSteps(graphData, graphData.nodes[0].id);
     setSteps(generatedSteps);
     setStepIndex(-1);
 
@@ -50,7 +63,7 @@ const AlgorithmView = ({ graphData, graphOptions, onBack }) => {
       networkRef.current = null;
     };
 
-  }, [graphData, graphOptions]);
+  }, [graphData, graphOptions, algorithmKey]);
 
   const resetGraphView = () => {
 
@@ -146,6 +159,9 @@ const AlgorithmView = ({ graphData, graphOptions, onBack }) => {
   };
 
   const currentStep = stepIndex >= 0 ? steps[stepIndex] : null;
+  const canGoPrev = stepIndex >= 0;
+  const canGoNext = stepIndex < steps.length - 1;
+  const currentCode = (ALGORITHM_MAP[algorithmKey] ?? ALGORITHM_MAP.dijkstra).code;
 
   return (
     <div className="flex gap-6">
@@ -153,10 +169,18 @@ const AlgorithmView = ({ graphData, graphOptions, onBack }) => {
       <div className="w-2/3">
         <div className="h-[500px] border" ref={containerRef} />
         <div className="mt-4 flex gap-2">
-          <button onClick={prev} className="px-4 py-2 bg-gray-500 text-white rounded">
+          <button
+            onClick={prev}
+            disabled={!canGoPrev}
+            className="px-4 py-2 bg-gray-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             Anterior
           </button>
-          <button onClick={next} className="px-4 py-2 bg-blue-500 text-white rounded">
+          <button
+            onClick={next}
+            disabled={!canGoNext}
+            className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             Siguiente
           </button>
           <button onClick={onBack} className="px-4 py-2 bg-red-500 text-white rounded">
@@ -167,7 +191,7 @@ const AlgorithmView = ({ graphData, graphOptions, onBack }) => {
 
       <div className="w-1/3">
         <CodeViewer
-          code={dijkstraCppCode}
+          code={currentCode}
           activeLine={currentStep?.line}
         />
       </div>

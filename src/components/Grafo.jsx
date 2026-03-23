@@ -58,6 +58,11 @@ const getGraphOptions = (isDirected) => ({
   }
 });
 
+const algorithmOptions = [
+  { value: 'dijkstra', label: 'Dijkstra' },
+  { value: 'floyd', label: 'Floyd' }
+];
+
 const Grafo = () => {
   const containerRef = useRef(null);
   const networkRef = useRef(null);
@@ -68,6 +73,7 @@ const Grafo = () => {
   const [isWeighted, setIsWeighted] = useState(false);
   const [algorithmMode, setAlgorithmMode] = useState(false);
   const [graphSnapshot, setGraphSnapshot] = useState(null);
+  const [selectedAlgorithm, setSelectedAlgorithm] = useState('dijkstra');
 
   useEffect(() => {
     if (algorithmMode) return;
@@ -353,12 +359,12 @@ const Grafo = () => {
   //   }
   // };
 
-  const startDijkstra = () => {
+  const startAlgorithm = () => {
       const nodes = networkRef.current.body.data.nodes.get();
       const edges = networkRef.current.body.data.edges.get();
 
       if (nodes.length === 0) {
-        console.warn("No se puede simular Dijkstra: el grafo no tiene nodos.");
+        console.warn("No se puede simular: el grafo no tiene nodos.");
         return;
       }
 
@@ -371,6 +377,7 @@ const Grafo = () => {
       <AlgorithmView
         graphData={graphSnapshot}
         graphOptions={getGraphOptions(isDirected)}
+        algorithmKey={selectedAlgorithm}
         onBack={() => setAlgorithmMode(false)}
       />
     );
@@ -430,11 +437,25 @@ const Grafo = () => {
         >
           Centrar Vista
         </button>
+        <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded">
+          <span>Algoritmo:</span>
+          <select
+            value={selectedAlgorithm}
+            onChange={(e) => setSelectedAlgorithm(e.target.value)}
+            className="bg-white border border-gray-300 rounded px-2 py-1"
+          >
+            {algorithmOptions.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <button
-          onClick={startDijkstra}
+          onClick={startAlgorithm}
           className="px-4 py-2 bg-purple-600 text-white rounded"
         >
-          Simular Dijkstra
+          Simular {algorithmOptions.find(a => a.value === selectedAlgorithm)?.label || 'Algoritmo'}
         </button>
         {/* {
           <button 
