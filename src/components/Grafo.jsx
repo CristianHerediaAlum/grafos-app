@@ -4,7 +4,59 @@ import { Network } from 'vis-network';
 import { DataSet } from 'vis-data';
 
 import GrafoIO from './GrafoIO';
+import AlgorithmView from './AlgorithmView';
 
+const getGraphOptions = (isDirected) => ({
+  nodes: {
+    shape: 'dot',
+    size: 20,
+    font: { size: 14, color: '#000' },
+    color: {
+      border: "#2B7CE9",
+      background: "#97C2FC",
+      highlight: {
+        border: "#2B7CE9",
+        background: "#D2E5FF"
+      }
+    }
+  },
+  edges: {
+    arrows: {
+      "to": {
+        "enabled": isDirected ? true : false
+      }
+    },
+    color: '#888',
+    font: {
+      color: '#000',
+      size: 12,
+      background: 'white',
+      strokeWidth: 2,
+      strokeColor: 'white'
+    },
+    labelHighlightBold: false,
+    smooth: {
+      type: 'continuous',
+      forceDirection: 'none',
+      roundness: 0.1
+    },
+    selfReference: { size: 20 }
+  },
+  layout: {
+    hierarchical: false,
+  },
+  physics: {
+    enabled: true,
+    stabilization: { iterations: 100 }
+  },
+  interaction: {
+    hover: true,
+    dragNodes: true,
+    dragView: false,
+    zoomView: true,
+    selectConnectedEdges: false
+  }
+});
 
 const Grafo = () => {
   const containerRef = useRef(null);
@@ -14,8 +66,12 @@ const Grafo = () => {
   const [isNetworkReady, setIsNetworkReady] = useState(false);
   const [isDirected, setIsDirected] = useState(true);
   const [isWeighted, setIsWeighted] = useState(false);
+  const [algorithmMode, setAlgorithmMode] = useState(false);
+  const [graphSnapshot, setGraphSnapshot] = useState(null);
 
   useEffect(() => {
+    if (algorithmMode) return;
+
     // Inicializar nodos y aristas
     // const nodes = new DataSet([
     //   { id: 1, label: "Nodo 1" },
@@ -39,57 +95,7 @@ const Grafo = () => {
 
     const data = { nodes, edges };
 
-    const options = {
-      nodes: {
-        shape: 'dot',
-        size: 20,
-        font: { size: 14, color: '#000' },
-        color: {
-          border: "#2B7CE9",
-          background: "#97C2FC",
-          highlight: {
-            border: "#2B7CE9",
-            background: "#D2E5FF"
-          }
-        }
-      },
-      edges: {
-        arrows: {
-          "to": {
-            "enabled": isDirected ? true : false
-          }
-        },
-        color: '#888',
-        font: {
-          color: '#000',
-          size: 12,
-          background: 'white',
-          strokeWidth: 2,
-          strokeColor: 'white'
-        },
-        labelHighlightBold: false,
-        smooth: {
-          type: 'continuous',
-          forceDirection: 'none',
-          roundness: 0.1
-        },
-        selfReference: { size: 20 }
-      },
-      layout: {
-        hierarchical: false,
-      },
-      physics: {
-        enabled: true,
-        stabilization: { iterations: 100 }
-      },
-      interaction: {
-        hover: true,
-        dragNodes: true,
-        dragView: false, // Evitar que se mueva la vista al arrastrar
-        zoomView: true,
-        selectConnectedEdges: false
-      }
-    };
+    const options = getGraphOptions(isDirected);
 
     const network = new Network(containerRef.current, data, options);
     networkRef.current = network;
@@ -128,7 +134,7 @@ const Grafo = () => {
 
     // Evento para crear nodos al hacer clic
     const handleClick = (event) => {
-      const { pointer, event: originalEvent } = event;
+      const { pointer } = event;
       const { canvas } = pointer;
 
       // Solo crear nodo si no se hizo clic en un nodo existente y es clic izquierdo
@@ -250,9 +256,11 @@ const Grafo = () => {
       }
     };
 
-    containerRef.current.addEventListener('contextmenu', (e) => {
+    const handleContextMenu = (e) => {
       e.preventDefault();
-    })
+    };
+
+    containerRef.current.addEventListener('contextmenu', handleContextMenu);
 
     network.on("click", handleClick); // solo para clic izquierdo
 
@@ -268,14 +276,16 @@ const Grafo = () => {
       network.off("click", handleClick);
       if (containerRef.current) {
         containerRef.current.removeEventListener('mousedown', handleMouseDown);
+        containerRef.current.removeEventListener('contextmenu', handleContextMenu);
       }
       if (networkRef.current) {
         networkRef.current.destroy();
+        networkRef.current = null;
       }
       setIsNetworkReady(false);
     }
 
-  }, [isDirected, isWeighted]);
+  }, [isDirected, isWeighted, algorithmMode]);
 
   const clearGraph = () => {
     if (networkRef.current) {
@@ -343,6 +353,28 @@ const Grafo = () => {
   //   }
   // };
 
+  const startDijkstra = () => {
+      const nodes = networkRef.current.body.data.nodes.get();
+      const edges = networkRef.current.body.data.edges.get();
+
+      if (nodes.length === 0) {
+        console.warn("No se puede simular Dijkstra: el grafo no tiene nodos.");
+        return;
+      }
+
+      setGraphSnapshot({ nodes, edges });
+      setAlgorithmMode(true);
+    };
+
+  if (algorithmMode) {
+    return (
+      <AlgorithmView
+        graphData={graphSnapshot}
+        graphOptions={getGraphOptions(isDirected)}
+        onBack={() => setAlgorithmMode(false)}
+      />
+    );
+  }
   return (
     <div className="w-full">
       <div className="mb-4 flex gap-2 flex-wrap">
@@ -397,6 +429,12 @@ const Grafo = () => {
           className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
         >
           Centrar Vista
+        </button>
+        <button
+          onClick={startDijkstra}
+          className="px-4 py-2 bg-purple-600 text-white rounded"
+        >
+          Simular Dijkstra
         </button>
         {/* {
           <button 
