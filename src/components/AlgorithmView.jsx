@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Network } from "vis-network";
 import { DataSet } from "vis-data";
-import CodeViewer from "./codeViewer";
+import CodeViewer from "./CodeViewer";
 import { dijkstraSteps, dijkstraCppCode } from "../algorithms/dijkstraGenerator";
 import { floydSteps, floydCppCode } from "../algorithms/floydGenerator";
 
@@ -18,40 +18,114 @@ const ALGORITHM_MAP = {
   }
 };
 
+const MATRIX_LABELS = {
+  A: "Matriz de costes minimos (A)",
+  P: "Matriz de vertices intermedios (P)"
+};
+
+const formatMatrixCell = (value) => {
+  if (value === Infinity) return "INF";
+  if (value === null || value === undefined) return "-";
+  return String(value);
+};
+
+const createMatrixState = (size) => ({
+  A: Array.from({ length: size }, () => Array(size).fill(Infinity)),
+  P: Array.from({ length: size }, () => Array(size).fill(null))
+});
+
+const buildInitialFloydMatrices = (graphData) => {
+  const nodeIds = graphData?.nodes?.map(n => n.id) || [];
+  const size = nodeIds.length;
+  const indexById = new Map(nodeIds.map((id, idx) => [id, idx]));
+
+  const parseWeight = (rawWeight) => {
+    if (rawWeight === null || rawWeight === undefined || rawWeight === "") {
+      return 1;
+    }
+    const weight = Number(rawWeight);
+    return Number.isFinite(weight) ? weight : 1;
+  };
+
+  const A = Array.from({ length: size }, () => Array(size).fill(Infinity));
+  const P = Array.from({ length: size }, (_, i) => Array(size).fill(nodeIds[i]));
+
+  for (let i = 0; i < size; i++) {
+    A[i][i] = 0;
+  }
+
+  for (const edge of graphData?.edges || []) {
+    const from = indexById.get(edge.from);
+    const to = indexById.get(edge.to);
+    if (from === undefined || to === undefined) continue;
+
+    const weight = parseWeight(edge.label);
+    if (weight < A[from][to]) {
+      A[from][to] = weight;
+    }
+  }
+
+  return { A, P };
+};
+
+const cloneMatrixState = (state) => ({
+  A: (state?.A || []).map(row => [...row]),
+  P: (state?.P || []).map(row => [...row])
+});
+
 const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onBack }) => {
 
   const containerRef = useRef(null);
   const networkRef = useRef(null);
   const baseLabelByNodeIdRef = useRef({});
+  const nodeIdsRef = useRef([]);
+  const initialFloydMatricesRef = useRef({ A: [], P: [] });
 
   const [steps, setSteps] = useState([]);
   const [stepIndex, setStepIndex] = useState(-1);
+  const [matrixState, setMatrixState] = useState({ A: [], P: [] });
+  const [highlightedCells, setHighlightedCells] = useState([]);
+
+  const isFloydMode = algorithmKey === "floyd";
 
   useEffect(() => {
 
     if (!graphData?.nodes?.length) {
       setSteps([]);
       setStepIndex(-1);
+      setMatrixState({ A: [], P: [] });
+      setHighlightedCells([]);
+      initialFloydMatricesRef.current = { A: [], P: [] };
       return;
     }
+
+    nodeIdsRef.current = graphData.nodes.map(n => n.id);
 
     baseLabelByNodeIdRef.current = Object.fromEntries(
       graphData.nodes.map(n => [n.id, n.label ?? String(n.id)])
     );
 
-    const nodes = new DataSet(graphData.nodes);
-    const edges = new DataSet(graphData.edges);
+    if (!isFloydMode) {
+      const nodes = new DataSet(graphData.nodes);
+      const edges = new DataSet(graphData.edges);
 
-    const network = new Network(containerRef.current, { nodes, edges }, {
-      ...graphOptions,
-      interaction: {
-        ...(graphOptions?.interaction || {}),
-        dragNodes: false
-      },
-      physics: false
-    });
+      const network = new Network(containerRef.current, { nodes, edges }, {
+        ...graphOptions,
+        interaction: {
+          ...(graphOptions?.interaction || {}),
+          dragNodes: false
+        },
+        physics: false
+      });
 
-    networkRef.current = network;
+      networkRef.current = network;
+    } else {
+      const initialMatrices = buildInitialFloydMatrices(graphData);
+      initialFloydMatricesRef.current = initialMatrices;
+      networkRef.current = null;
+      setMatrixState(cloneMatrixState(initialMatrices));
+      setHighlightedCells([]);
+    }
 
     const selectedAlgorithm = ALGORITHM_MAP[algorithmKey] ?? ALGORITHM_MAP.dijkstra;
     const generatedSteps = selectedAlgorithm.createSteps(graphData, graphData.nodes[0].id);
@@ -59,11 +133,13 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
     setStepIndex(-1);
 
     return () => {
-      network.destroy();
+      if (networkRef.current) {
+        networkRef.current.destroy();
+      }
       networkRef.current = null;
     };
 
-  }, [graphData, graphOptions, algorithmKey]);
+  }, [graphData, graphOptions, algorithmKey, isFloydMode]);
 
   const resetGraphView = () => {
 
@@ -123,7 +199,44 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
     });
   };
 
+  const applyMatrixStep = (targetIndex) => {
+
+    if (!graphData?.nodes?.length) {
+      setMatrixState({ A: [], P: [] });
+      setHighlightedCells([]);
+      return;
+    }
+
+    const baseMatrices =
+      initialFloydMatricesRef.current?.A?.length
+        ? initialFloydMatricesRef.current
+        : buildInitialFloydMatrices(graphData);
+
+    const nextState = cloneMatrixState(baseMatrices);
+
+    for (let i = 0; i <= targetIndex; i++) {
+      const step = steps[i];
+      if (!step) continue;
+
+      step.matrixUpdates?.forEach(({ matrix, i: row, j: col, value }) => {
+        if (!nextState[matrix] || nextState[matrix][row] === undefined) return;
+        nextState[matrix][row][col] = value;
+      });
+    }
+
+    const currentStepUpdates = steps[targetIndex]?.matrixUpdates || [];
+    const nextHighlights = currentStepUpdates.map(({ matrix, i, j }) => ({ matrix, i, j }));
+
+    setMatrixState(nextState);
+    setHighlightedCells(nextHighlights);
+  };
+
   const renderToIndex = (targetIndex) => {
+
+    if (isFloydMode) {
+      applyMatrixStep(targetIndex);
+      return;
+    }
 
     resetGraphView();
 
@@ -151,7 +264,16 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
     setStepIndex(newIndex);
 
     if (newIndex < 0) {
-      resetGraphView();
+      if (isFloydMode) {
+        const baseMatrices =
+          initialFloydMatricesRef.current?.A?.length
+            ? initialFloydMatricesRef.current
+            : buildInitialFloydMatrices(graphData);
+        setMatrixState(cloneMatrixState(baseMatrices));
+        setHighlightedCells([]);
+      } else {
+        resetGraphView();
+      }
       return;
     }
 
@@ -163,11 +285,69 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
   const canGoNext = stepIndex < steps.length - 1;
   const currentCode = (ALGORITHM_MAP[algorithmKey] ?? ALGORITHM_MAP.dijkstra).code;
 
+  const isHighlightedCell = (matrix, i, j) =>
+    highlightedCells.some(cell => cell.matrix === matrix && cell.i === i && cell.j === j);
+
+  const renderMatrix = (matrixKey) => {
+    const matrix = matrixState[matrixKey] || [];
+    const nodeIds = nodeIdsRef.current;
+
+    if (!matrix.length) return null;
+
+    return (
+      <div key={matrixKey} className="rounded border border-gray-300 bg-white p-3 shadow-sm">
+        <h3 className="mb-2 text-sm font-semibold text-gray-700">{MATRIX_LABELS[matrixKey]}</h3>
+        <div className="overflow-auto">
+          <table className="min-w-full border-collapse text-sm">
+            <thead>
+              <tr>
+                <th className="border border-gray-300 bg-gray-100 px-3 py-1 text-gray-700">i\\j</th>
+                {nodeIds.map(nodeId => (
+                  <th key={`col-${matrixKey}-${nodeId}`} className="border border-gray-300 bg-gray-100 px-3 py-1 text-gray-700">
+                    {nodeId}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {matrix.map((row, rowIndex) => (
+                <tr key={`row-${matrixKey}-${rowIndex}`}>
+                  <th className="border border-gray-300 bg-gray-100 px-3 py-1 text-gray-700">
+                    {nodeIds[rowIndex]}
+                  </th>
+                  {row.map((value, colIndex) => (
+                    <td
+                      key={`cell-${matrixKey}-${rowIndex}-${colIndex}`}
+                      className={`border border-gray-300 px-3 py-1 text-center text-gray-900 ${
+                        isHighlightedCell(matrixKey, rowIndex, colIndex)
+                          ? "bg-yellow-200 font-semibold"
+                          : "bg-white"
+                      }`}
+                    >
+                      {formatMatrixCell(value)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex gap-6">
 
       <div className="w-2/3">
-        <div className="h-[500px] border" ref={containerRef} />
+        {isFloydMode ? (
+          <div className="h-[500px] overflow-auto space-y-4 border bg-gray-50 p-4">
+            {renderMatrix("A")}
+            {renderMatrix("P")}
+          </div>
+        ) : (
+          <div className="h-[500px] border" ref={containerRef} />
+        )}
         <div className="mt-4 flex gap-2">
           <button
             onClick={prev}

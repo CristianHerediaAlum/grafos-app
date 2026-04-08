@@ -45,12 +45,13 @@ export function* floydSteps(graphData) {
 		return Number.isFinite(weight) ? weight : 1;
 	};
 
+	const G = Array.from({ length: n }, () => Array(n).fill(Infinity));
 	const A = Array.from({ length: n }, () => Array(n).fill(Infinity));
 	const P = Array.from({ length: n }, () => Array(n).fill(null));
 	const edgeByPair = new Map();
 
 	for (let i = 0; i < n; i++) {
-		A[i][i] = 0;
+		G[i][i] = 0;
 	}
 
 	for (const e of edges) {
@@ -65,7 +66,7 @@ export function* floydSteps(graphData) {
 		// Si hay aristas paralelas, se conserva la de menor coste.
 		if (previous === undefined || weight < previous.weight) {
 			edgeByPair.set(key, { weight, edgeId: e.id });
-			A[from][to] = weight;
+			G[from][to] = weight;
 		}
 	}
 
@@ -76,16 +77,32 @@ export function* floydSteps(graphData) {
 		// Línea 10
 		yield { line: 10, highlightNodes: [nodes[i]] };
 
+		A[i] = [...G[i]];
 		// Línea 11
-		yield { line: 11, highlightNodes: [nodes[i]] };
+		yield {
+			line: 11,
+			highlightNodes: [nodes[i]],
+			highlightMatrixCells: Array.from({ length: n }, (_, j) => ({ matrix: "A", i, j })),
+			matrixUpdates: A[i].map((value, j) => ({ matrix: "A", i, j, value }))
+		};
 
 		A[i][i] = 0;
 		// Línea 12
-		yield { line: 12, highlightNodes: [nodes[i]] };
+		yield {
+			line: 12,
+			highlightNodes: [nodes[i]],
+			highlightMatrixCells: [{ matrix: "A", i, j: i }],
+			matrixUpdates: [{ matrix: "A", i, j: i, value: 0 }]
+		};
 
-		P[i] = Array(n).fill(i);
+		P[i] = Array(n).fill(nodes[i]);
 		// Línea 13
-		yield { line: 13, highlightNodes: [nodes[i]] };
+		yield {
+			line: 13,
+			highlightNodes: [nodes[i]],
+			highlightMatrixCells: Array.from({ length: n }, (_, j) => ({ matrix: "P", i, j })),
+			matrixUpdates: P[i].map((value, j) => ({ matrix: "P", i, j, value }))
+		};
 	}
 
 	for (let k = 0; k < n; k++) {
@@ -108,7 +125,12 @@ export function* floydSteps(graphData) {
 				yield {
 					line: 20,
 					highlightNodes: [nodes[i], nodes[j], nodes[k]],
-					highlightEdges: [edgeIK?.edgeId, edgeKJ?.edgeId].filter(id => id !== undefined)
+					highlightEdges: [edgeIK?.edgeId, edgeKJ?.edgeId].filter(id => id !== undefined),
+					highlightMatrixCells: [
+						{ matrix: "A", i, j: k },
+						{ matrix: "A", i: k, j },
+						{ matrix: "A", i, j }
+					]
 				};
 
 				// Línea 21
@@ -120,15 +142,22 @@ export function* floydSteps(graphData) {
 					yield {
 						line: 22,
 						highlightNodes: [nodes[i], nodes[j]],
+						highlightMatrixCells: [{ matrix: "A", i, j }],
+						matrixUpdates: [{ matrix: "A", i, j, value: ikj }],
 						update: {
 							node: nodes[j],
 							distance: ikj
 						}
 					};
 
-					P[i][j] = k;
+					P[i][j] = nodes[k];
 					// Línea 23
-					yield { line: 23, highlightNodes: [nodes[i], nodes[j], nodes[k]] };
+					yield {
+						line: 23,
+						highlightNodes: [nodes[i], nodes[j], nodes[k]],
+						highlightMatrixCells: [{ matrix: "P", i, j }],
+						matrixUpdates: [{ matrix: "P", i, j, value: nodes[k] }]
+					};
 				}
 			}
 		}
