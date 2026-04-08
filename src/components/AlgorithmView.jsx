@@ -23,6 +23,12 @@ const MATRIX_LABELS = {
   P: "Matriz de vertices intermedios (P)"
 };
 
+const FLOYD_READ_ROLE_STYLE = {
+  ik: "bg-blue-200",
+  kj: "bg-red-200",
+  ij: "bg-purple-200"
+};
+
 const formatMatrixCell = (value) => {
   if (value === Infinity) return "INF";
   if (value === null || value === undefined) return "-";
@@ -85,6 +91,7 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
   const [stepIndex, setStepIndex] = useState(-1);
   const [matrixState, setMatrixState] = useState({ A: [], P: [] });
   const [highlightedCells, setHighlightedCells] = useState([]);
+  const [matrixReadHighlights, setMatrixReadHighlights] = useState([]);
 
   const isFloydMode = algorithmKey === "floyd";
 
@@ -95,6 +102,7 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
       setStepIndex(-1);
       setMatrixState({ A: [], P: [] });
       setHighlightedCells([]);
+      setMatrixReadHighlights([]);
       initialFloydMatricesRef.current = { A: [], P: [] };
       return;
     }
@@ -125,6 +133,7 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
       networkRef.current = null;
       setMatrixState(cloneMatrixState(initialMatrices));
       setHighlightedCells([]);
+      setMatrixReadHighlights([]);
     }
 
     const selectedAlgorithm = ALGORITHM_MAP[algorithmKey] ?? ALGORITHM_MAP.dijkstra;
@@ -226,9 +235,11 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
 
     const currentStepUpdates = steps[targetIndex]?.matrixUpdates || [];
     const nextHighlights = currentStepUpdates.map(({ matrix, i, j }) => ({ matrix, i, j }));
+    const currentStepReadRoles = steps[targetIndex]?.matrixReadRoles || [];
 
     setMatrixState(nextState);
     setHighlightedCells(nextHighlights);
+    setMatrixReadHighlights(currentStepReadRoles);
   };
 
   const renderToIndex = (targetIndex) => {
@@ -271,6 +282,7 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
             : buildInitialFloydMatrices(graphData);
         setMatrixState(cloneMatrixState(baseMatrices));
         setHighlightedCells([]);
+        setMatrixReadHighlights([]);
       } else {
         resetGraphView();
       }
@@ -287,6 +299,17 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
 
   const isHighlightedCell = (matrix, i, j) =>
     highlightedCells.some(cell => cell.matrix === matrix && cell.i === i && cell.j === j);
+
+  const getReadRoleForCell = (matrix, i, j) => {
+    const roles = matrixReadHighlights
+      .filter(cell => cell.matrix === matrix && cell.i === i && cell.j === j)
+      .map(cell => cell.role);
+
+    if (roles.includes("ij")) return "ij";
+    if (roles.includes("ik")) return "ik";
+    if (roles.includes("kj")) return "kj";
+    return null;
+  };
 
   const renderMatrix = (matrixKey) => {
     const matrix = matrixState[matrixKey] || [];
@@ -316,16 +339,25 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
                     {nodeIds[rowIndex]}
                   </th>
                   {row.map((value, colIndex) => (
+                    (() => {
+                      const isUpdated = isHighlightedCell(matrixKey, rowIndex, colIndex);
+                      const readRole = isUpdated ? null : getReadRoleForCell(matrixKey, rowIndex, colIndex);
+                      const readRoleClass = readRole ? FLOYD_READ_ROLE_STYLE[readRole] : "";
+                      const backgroundClass = isUpdated
+                        ? "bg-yellow-200"
+                        : (readRoleClass || "bg-white");
+
+                      return (
                     <td
                       key={`cell-${matrixKey}-${rowIndex}-${colIndex}`}
-                      className={`border border-gray-300 px-3 py-1 text-center text-gray-900 ${
-                        isHighlightedCell(matrixKey, rowIndex, colIndex)
-                          ? "bg-yellow-200 font-semibold"
-                          : "bg-white"
+                      className={`border border-gray-300 px-3 py-1 text-center text-gray-900 ${backgroundClass} ${
+                        isUpdated ? "font-semibold" : ""
                       }`}
                     >
                       {formatMatrixCell(value)}
                     </td>
+                      );
+                    })()
                   ))}
                 </tr>
               ))}
@@ -342,6 +374,15 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
       <div className="w-2/3">
         {isFloydMode ? (
           <div className="h-[500px] overflow-auto space-y-4 border bg-gray-50 p-4">
+            <div className="rounded border border-gray-300 bg-white p-3 shadow-sm">
+              <h3 className="mb-2 text-sm font-semibold text-gray-700">Leyenda de colores (Floyd)</h3>
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-blue-800">A[i][k]</span>
+                <span className="rounded border border-red-300 bg-red-50 px-2 py-1 text-red-800">A[k][j]</span>
+                <span className="rounded border border-purple-300 bg-purple-50 px-2 py-1 text-purple-800">A[i][j]</span>
+                <span className="rounded border border-yellow-300 bg-yellow-200 px-2 py-1 text-yellow-900 font-semibold">Celda actualizada</span>
+              </div>
+            </div>
             {renderMatrix("A")}
             {renderMatrix("P")}
           </div>

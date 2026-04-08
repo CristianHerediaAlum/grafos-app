@@ -107,15 +107,27 @@ export function* floydSteps(graphData) {
 
 	for (let k = 0; k < n; k++) {
 		// Línea 17
-		yield { line: 17, highlightNodes: [nodes[k]] };
+		yield {
+			line: 17,
+			highlightNodes: [nodes[k]],
+			floydPointers: { k: nodes[k] }
+		};
 
 		for (let i = 0; i < n; i++) {
 			// Línea 18
-			yield { line: 18, highlightNodes: [nodes[i], nodes[k]] };
+			yield {
+				line: 18,
+				highlightNodes: [nodes[i], nodes[k]],
+				floydPointers: { i: nodes[i], k: nodes[k] }
+			};
 
 			for (let j = 0; j < n; j++) {
 				// Línea 19
-				yield { line: 19, highlightNodes: [nodes[i], nodes[j], nodes[k]] };
+				yield {
+					line: 19,
+					highlightNodes: [nodes[i], nodes[j], nodes[k]],
+					floydPointers: { i: nodes[i], j: nodes[j], k: nodes[k] }
+				};
 
 				const ikj = A[i][k] + A[k][j];
 				const edgeIK = edgeByPair.get(`${i}->${k}`);
@@ -126,6 +138,12 @@ export function* floydSteps(graphData) {
 					line: 20,
 					highlightNodes: [nodes[i], nodes[j], nodes[k]],
 					highlightEdges: [edgeIK?.edgeId, edgeKJ?.edgeId].filter(id => id !== undefined),
+					floydPointers: { i: nodes[i], j: nodes[j], k: nodes[k] },
+					matrixReadRoles: [
+						{ matrix: "A", i, j: k, role: "ik" },
+						{ matrix: "A", i: k, j, role: "kj" },
+						{ matrix: "A", i, j, role: "ij" }
+					],
 					highlightMatrixCells: [
 						{ matrix: "A", i, j: k },
 						{ matrix: "A", i: k, j },
@@ -135,13 +153,18 @@ export function* floydSteps(graphData) {
 
 				// Línea 21
 				if (ikj < A[i][j]) {
-					yield { line: 21, highlightNodes: [nodes[i], nodes[j], nodes[k]] };
+					yield {
+						line: 21,
+						highlightNodes: [nodes[i], nodes[j], nodes[k]],
+						floydPointers: { i: nodes[i], j: nodes[j], k: nodes[k] }
+					};
 
 					A[i][j] = ikj;
 					// Línea 22
 					yield {
 						line: 22,
 						highlightNodes: [nodes[i], nodes[j]],
+						floydPointers: { i: nodes[i], j: nodes[j], k: nodes[k] },
 						highlightMatrixCells: [{ matrix: "A", i, j }],
 						matrixUpdates: [{ matrix: "A", i, j, value: ikj }],
 						update: {
@@ -155,6 +178,7 @@ export function* floydSteps(graphData) {
 					yield {
 						line: 23,
 						highlightNodes: [nodes[i], nodes[j], nodes[k]],
+						floydPointers: { i: nodes[i], j: nodes[j], k: nodes[k] },
 						highlightMatrixCells: [{ matrix: "P", i, j }],
 						matrixUpdates: [{ matrix: "P", i, j, value: nodes[k] }]
 					};
