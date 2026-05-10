@@ -137,7 +137,13 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
     }
 
     const selectedAlgorithm = ALGORITHM_MAP[algorithmKey] ?? ALGORITHM_MAP.dijkstra;
-    const generatedSteps = selectedAlgorithm.createSteps(graphData, graphData.nodes[0].id);
+    const hasCustomOrigin = graphData.nodes.some(
+      (node) => node.id === graphData.algorithmOriginNodeId
+    );
+    const originNodeId = hasCustomOrigin
+      ? graphData.algorithmOriginNodeId
+      : graphData.nodes[0].id;
+    const generatedSteps = selectedAlgorithm.createSteps(graphData, originNodeId);
     setSteps(generatedSteps);
     setStepIndex(-1);
 

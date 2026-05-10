@@ -68,6 +68,7 @@ const Grafo = () => {
   const networkRef = useRef(null);
   const nodeCounterRef = useRef(1);
   const selectedNodeRef = useRef(null);
+  const algorithmOriginNodeRef = useRef(null);
   const [isNetworkReady, setIsNetworkReady] = useState(false);
   const [isDirected, setIsDirected] = useState(true);
   const [isWeighted, setIsWeighted] = useState(false);
@@ -140,6 +141,9 @@ const Grafo = () => {
 
     // Evento para crear nodos al hacer clic
     const handleClick = (event) => {
+      const mouseButton = event?.event?.srcEvent?.button;
+      if (mouseButton !== 0) return;
+
       const { pointer } = event;
       const { canvas } = pointer;
 
@@ -172,28 +176,36 @@ const Grafo = () => {
       const clickedNodeId = getClickedNodeId(e);
       
       if (e.button === 1) { // Botón central
-        // Primero verificar si hay una arista en la posición del clic
-        const rect = containerRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        const clickedEdgeId = networkRef.current.getEdgeAt({ x, y });
-
-        if (clickedEdgeId) {
-          // Si hay una arista, eliminarla
-          edges.remove({ id: clickedEdgeId });
-          console.log(`Arista ${clickedEdgeId} eliminada con clic central.`);
-        } else if (clickedNodeId) {
-          // Si no hay arista pero hay un nodo, eliminar el nodo
+        // Priorizar nodo sobre arista para evitar borrar aristas al intentar borrar nodos.
+        if (clickedNodeId) {
           nodes.remove({ id: clickedNodeId });
+          if (algorithmOriginNodeRef.current === clickedNodeId) {
+            algorithmOriginNodeRef.current = null;
+          }
           // No decrementar el contador, mantener secuencia incremental
           console.log(`Nodo ${clickedNodeId} eliminado con clic central.`);
+        } else {
+          const rect = containerRef.current.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          const clickedEdgeId = networkRef.current.getEdgeAt({ x, y });
+
+          if (clickedEdgeId) {
+            edges.remove({ id: clickedEdgeId });
+            console.log(`Arista ${clickedEdgeId} eliminada con clic central.`);
+          }
         }
 
       }
       else if (e.button === 2) { // Botón derecho
         if (clickedNodeId) {
+          if (selectedNodeRef.current !== null && !nodes.get(selectedNodeRef.current)) {
+            selectedNodeRef.current = null;
+          }
+
           if (selectedNodeRef.current === null) {
             selectedNodeRef.current = clickedNodeId;
+            algorithmOriginNodeRef.current = clickedNodeId;
             // Actualizar el color del nodo seleccionado para indicar selección
             nodes.update({
               id: clickedNodeId,
@@ -212,6 +224,7 @@ const Grafo = () => {
             const toId = clickedNodeId;
 
             if (fromId !== toId) {
+              algorithmOriginNodeRef.current = fromId;
               // const existingEdge = edges.get().find(edge => 
               //   (edge.from === fromId && edge.to === toId)
               //   // || (edge.from === toId && edge.to === fromId)
@@ -288,6 +301,7 @@ const Grafo = () => {
         networkRef.current.destroy();
         networkRef.current = null;
       }
+      selectedNodeRef.current = null;
       setIsNetworkReady(false);
     }
 
@@ -300,6 +314,7 @@ const Grafo = () => {
       nodes.clear();
       edges.clear();
       selectedNodeRef.current = null;
+      algorithmOriginNodeRef.current = null;
       nodeCounterRef.current = 1;
     }
   };
@@ -329,35 +344,119 @@ const Grafo = () => {
     }
   };
 
-  // const addRandomEdge = () => {
-  //   if (networkRef.current) {
-  //     const nodes = networkRef.current.body.data.nodes;
-  //     const edges = networkRef.current.body.data.edges;
-  //     const nodeIds = nodes.getIds();
-  //     if (nodeIds.length < 2) return;
+  const generateRandomGraph = () => {
+    if (!networkRef.current) return;
 
-  //     const fromId = nodeIds[Math.floor(Math.random() * nodeIds.length)]; // Tomamos un numero aleatorio y tomamos por defecto
-  //     let toId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+    // Pedir número de nodos
+    const nodeCountInput = prompt("¿Cuántos nodos deseas? (mínimo 1, máximo 20):", "7");
+    
+    if (nodeCountInput === null) return; // Usuario canceló
+    
+    let nodeCount = parseInt(nodeCountInput, 10);
+    
+    // Validar entrada
+    if (isNaN(nodeCount) || nodeCount < 1 || nodeCount > 20) {
+      alert("Por favor, ingresa un número entre 1 y 20");
+      return;
+    }
 
-  //     // Evitar self-loops, susceptible a cambio
-  //     while (toId === fromId && nodeIds.length > 1) {
-  //       toId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
-  //     }
+    // Pedir si quiere grafo completo
+    const isComplete = confirm("¿Deseas un grafo completo? (todas las aristas posibles)\n\nAceptar = Completo\nCancelar = Aleatorio");
 
-  //     // Verificar si la arista ya existe
-  //     const existingEdge = edges.get().find(edge => 
-  //       (edge.from === fromId && edge.to === toId) 
-  //       // || (edge.from === toId && edge.to === fromId)
-  //     );
+    // Limpiar grafo anterior
+    clearGraph();
 
-  //     if (!existingEdge) {
-  //       edges.add({
-  //         from: fromId,
-  //         to: toId
-  //       });
-  //     }
-  //   }
-  // };
+    const nodes = networkRef.current.body.data.nodes;
+    const edges = networkRef.current.body.data.edges;
+
+    const nodeIds = [];
+
+    // Crear los nodos
+    for (let i = 0; i < nodeCount; i++) {
+      const nodeId = i + 1;
+      nodeIds.push(nodeId);
+      nodes.add({
+        id: nodeId,
+        label: `Nodo ${nodeId}`,
+        x: Math.random() * 400 - 200,
+        y: Math.random() * 400 - 200,
+        physics: true
+      });
+    }
+
+    const createdEdges = new Set();
+
+    if (isComplete) {
+      // Grafo completo: conectar todos los nodos
+      for (let i = 0; i < nodeIds.length; i++) {
+        for (let j = 0; j < nodeIds.length; j++) {
+          if (i !== j) {
+            const fromId = nodeIds[i];
+            const toId = nodeIds[j];
+            
+            // Evitar aristas duplicadas en grafos no dirigidos
+            const edgeKey = isDirected ? `${fromId}->${toId}` : [fromId, toId].sort().join('-');
+            
+            if (!createdEdges.has(edgeKey)) {
+              const newEdge = { from: fromId, to: toId };
+              
+              // Agregar peso si el grafo es ponderado
+              if (isWeighted) {
+                newEdge.label = String(Math.floor(Math.random() * 9) + 1);
+              }
+              
+              edges.add(newEdge);
+              createdEdges.add(edgeKey);
+              
+              // En grafos no dirigidos, solo crear una arista entre cada par
+              if (!isDirected) {
+                createdEdges.add([toId, fromId].sort().join('-'));
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // Grafo aleatorio: crear aristas aleatorias (30-60% de las posibles)
+      const maxEdges = nodeCount * (nodeCount - 1);
+      const edgeCount = Math.floor(Math.random() * (maxEdges * 0.3)) + Math.floor(maxEdges * 0.3);
+
+      for (let i = 0; i < edgeCount; i++) {
+        const fromId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+        let toId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+
+        // Evitar self-loops
+        while (toId === fromId) {
+          toId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+        }
+
+        // Evitar aristas duplicadas (considerando dirección si es dirigido)
+        const edgeKey = isDirected ? `${fromId}->${toId}` : [fromId, toId].sort().join('-');
+        
+        if (!createdEdges.has(edgeKey)) {
+          const newEdge = { from: fromId, to: toId };
+          
+          // Agregar peso si el grafo es ponderado
+          if (isWeighted) {
+            newEdge.label = String(Math.floor(Math.random() * 9) + 1);
+          }
+          
+          edges.add(newEdge);
+          createdEdges.add(edgeKey);
+        }
+      }
+    }
+
+    // Actualizar el contador de nodos
+    nodeCounterRef.current = nodeCount + 1;
+
+    // Ajustar física y centrar vista
+    setTimeout(() => {
+      if (networkRef.current) {
+        networkRef.current.fit();
+      }
+    }, 500);
+  };
 
   const startAlgorithm = () => {
       const nodes = networkRef.current.body.data.nodes.get();
@@ -368,7 +467,12 @@ const Grafo = () => {
         return;
       }
 
-      setGraphSnapshot({ nodes, edges });
+      const selectedOriginId = algorithmOriginNodeRef.current;
+      const hasSelectedOrigin = nodes.some((node) => node.id === selectedOriginId);
+      const originNodeId = hasSelectedOrigin ? selectedOriginId : nodes[0].id;
+
+      setGraphSnapshot({ nodes, edges, algorithmOriginNodeId: originNodeId });
+      selectedNodeRef.current = null;
       setAlgorithmMode(true);
     };
 
@@ -403,6 +507,8 @@ const Grafo = () => {
 
               const maxId = Math.max(...data.nodes.map(n => n.id), 0);
               nodeCounterRef.current = maxId + 1;
+              selectedNodeRef.current = null;
+              algorithmOriginNodeRef.current = null;
             }}
           >
           </GrafoIO>
@@ -436,6 +542,12 @@ const Grafo = () => {
           className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
         >
           Centrar Vista
+        </button>
+        <button
+          onClick={generateRandomGraph}
+          className="px-4 py-2 bg-cyan-500 text-white rounded hover:bg-cyan-600 transition-colors"
+        >
+          Generar Grafo Aleatorio
         </button>
         <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded">
           <span>Algoritmo:</span>
