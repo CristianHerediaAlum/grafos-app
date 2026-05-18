@@ -87,6 +87,9 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
   const nodeIdsRef = useRef([]);
   const initialFloydMatricesRef = useRef({ A: [], P: [] });
   const originalFloydEdgesRef = useRef(new Map());
+  const shortestPathModeRef = useRef(false);
+  const shortestPathSelectionRef = useRef({ origin: null, destination: null });
+  const shortestPathNodeIdsRef = useRef([]);
 
   const [steps, setSteps] = useState([]);
   const [stepIndex, setStepIndex] = useState(-1);
@@ -95,9 +98,13 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
   const [matrixReadHighlights, setMatrixReadHighlights] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [floydViewMode, setFloydViewMode] = useState("matrices"); // 'matrices' | 'graph'
+  const [shortestPathMode, setShortestPathMode] = useState(false);
+  const [shortestPathSelection, setShortestPathSelection] = useState({ origin: null, destination: null });
+  const [shortestPathNodeIds, setShortestPathNodeIds] = useState([]);
 
   const isFloydMode = algorithmKey === "floyd";
   const allowFloydNodeDragging = isFloydMode && floydViewMode === "graph";
+  const canUseShortestPathMode = isFloydMode && floydViewMode === "graph" && stepIndex === steps.length - 1 && steps.length > 0;
 
   const getNetworkOptions = () => ({
     ...graphOptions,
@@ -107,6 +114,108 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
     },
     physics: false
   });
+
+  const getDefaultNodeColor = () => (
+    graphOptions?.nodes?.color ?? {
+      border: "#2B7CE9",
+      background: "#97C2FC",
+      highlight: {
+        border: "#2B7CE9",
+        background: "#D2E5FF"
+      }
+    }
+  );
+
+  const getOriginNodeColor = () => ({
+    border: "#FF6B6B",
+    background: "#FFD93D",
+    highlight: {
+      border: "#FF6B6B",
+      background: "#FFD93D"
+    }
+  });
+
+  const getDestinationNodeColor = () => ({
+    border: "#2563EB",
+    background: "#BFDBFE",
+    highlight: {
+      border: "#2563EB",
+      background: "#BFDBFE"
+    }
+  });
+
+  const getPairKey = (fromId, toId) => (
+    Boolean(graphOptions?.edges?.arrows?.to?.enabled)
+      ? `${fromId}->${toId}`
+      : [fromId, toId].sort().join("--")
+  );
+
+  const buildShortestPath = (startId, endId) => {
+    if (startId === endId) return [startId];
+
+    const nodeIds = nodeIdsRef.current;
+    const indexById = new Map(nodeIds.map((id, idx) => [id, idx]));
+    const startIndex = indexById.get(startId);
+    const endIndex = indexById.get(endId);
+
+    if (startIndex === undefined || endIndex === undefined) return [];
+    if (matrixState.A?.[startIndex]?.[endIndex] === Infinity) return [];
+
+    const buildPathRecursive = (fromId, toId) => {
+      if (fromId === toId) return [fromId];
+
+      const fromIndex = indexById.get(fromId);
+      const toIndex = indexById.get(toId);
+      if (fromIndex === undefined || toIndex === undefined) return [];
+
+      const intermediate = matrixState.P?.[fromIndex]?.[toIndex];
+      if (intermediate === null || intermediate === undefined) return [];
+
+      if (intermediate === fromId) {
+        return [fromId, toId];
+      }
+
+      const leftPath = buildPathRecursive(fromId, intermediate);
+      const rightPath = buildPathRecursive(intermediate, toId);
+
+      if (!leftPath.length || !rightPath.length) return [];
+
+      return [...leftPath.slice(0, -1), ...rightPath];
+    };
+
+    return buildPathRecursive(startId, endId);
+  };
+
+  const resetShortestPathSelection = (refreshGraph = true) => {
+    shortestPathModeRef.current = false;
+    shortestPathSelectionRef.current = { origin: null, destination: null };
+    shortestPathNodeIdsRef.current = [];
+    setShortestPathMode(false);
+    setShortestPathSelection({ origin: null, destination: null });
+    setShortestPathNodeIds([]);
+
+    if (refreshGraph) {
+      updateFloydGraphView(matrixState);
+    }
+  };
+
+  const toggleShortestPathMode = () => {
+    if (!canUseShortestPathMode) return;
+
+    const nextMode = !shortestPathMode;
+    if (!nextMode) {
+      resetShortestPathSelection(true);
+      return;
+    }
+
+    shortestPathModeRef.current = nextMode;
+    shortestPathSelectionRef.current = { origin: null, destination: null };
+    shortestPathNodeIdsRef.current = [];
+    setShortestPathMode(nextMode);
+    setShortestPathSelection({ origin: null, destination: null });
+    setShortestPathNodeIds([]);
+    updateFloydGraphView(matrixState);
+  };
 
   useEffect(() => {
 
@@ -230,6 +339,64 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
     }
   }, [stepIndex, isPlaying]);
 
+  useEffect(() => {
+    shortestPathModeRef.current = shortestPathMode;
+    shortestPathSelectionRef.current = shortestPathSelection;
+    shortestPathNodeIdsRef.current = shortestPathNodeIds;
+  }, [shortestPathMode, shortestPathSelection, shortestPathNodeIds]);
+
+  useEffect(() => {
+    if (canUseShortestPathMode) return;
+
+    resetShortestPathSelection(false);
+  }, [canUseShortestPathMode]);
+
+  useEffect(() => {
+    if (!canUseShortestPathMode || !shortestPathMode || floydViewMode !== "graph") return;
+
+    const handleShortestPathSelection = (event) => {
+      event.preventDefault();
+
+      if (!networkRef.current || !containerRef.current) return;
+
+      const rect = containerRef.current.getBoundingClientRect();
+      const clickedNodeId = networkRef.current.getNodeAt({
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top
+      });
+
+      if (clickedNodeId === null || clickedNodeId === undefined) return;
+
+      const currentSelection = shortestPathSelectionRef.current;
+
+      if (currentSelection.origin === null || currentSelection.destination !== null) {
+        shortestPathSelectionRef.current = { origin: clickedNodeId, destination: null };
+        shortestPathNodeIdsRef.current = [];
+        setShortestPathSelection({ origin: clickedNodeId, destination: null });
+        setShortestPathNodeIds([]);
+        updateFloydGraphView(matrixState);
+        return;
+      }
+
+      if (currentSelection.origin === clickedNodeId) return;
+
+      const path = buildShortestPath(currentSelection.origin, clickedNodeId);
+      shortestPathSelectionRef.current = { origin: currentSelection.origin, destination: clickedNodeId };
+      shortestPathNodeIdsRef.current = path;
+      setShortestPathSelection({ origin: currentSelection.origin, destination: clickedNodeId });
+      setShortestPathNodeIds(path);
+      updateFloydGraphView(matrixState);
+    };
+
+    containerRef.current.addEventListener("contextmenu", handleShortestPathSelection);
+
+    return () => {
+      if (containerRef.current) {
+        containerRef.current.removeEventListener("contextmenu", handleShortestPathSelection);
+      }
+    };
+  }, [canUseShortestPathMode, shortestPathMode, floydViewMode, matrixState]);
+
   const togglePlayPause = () => {
     if (!steps.length) return;
     
@@ -348,6 +515,9 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
   const renderToIndex = (targetIndex) => {
 
     if (isFloydMode) {
+      if (targetIndex !== steps.length - 1) {
+        resetShortestPathSelection(false);
+      }
       applyMatrixStep(targetIndex);
       return;
     }
@@ -367,6 +537,7 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
     const newIndex = Math.min(stepIndex + 1, steps.length - 1);
     if (newIndex === stepIndex) return;
 
+    resetShortestPathSelection(false);
     setStepIndex(newIndex);
     renderToIndex(newIndex);
   };
@@ -375,6 +546,7 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
     if (stepIndex < 0) return;
 
     const newIndex = stepIndex - 1;
+    resetShortestPathSelection(false);
     setStepIndex(newIndex);
 
     if (newIndex < 0) {
@@ -399,6 +571,7 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
   const goToStart = () => {
     if (stepIndex === -1) return;
 
+    resetShortestPathSelection(false);
     setStepIndex(-1);
 
     if (isFloydMode) {
@@ -419,6 +592,7 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
     if (!steps.length || stepIndex === steps.length - 1) return;
 
     const newIndex = steps.length - 1;
+    resetShortestPathSelection(false);
     setStepIndex(newIndex);
     renderToIndex(newIndex);
   };
@@ -429,6 +603,7 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
     const stepNum = parseInt(step, 10);
     if (stepNum < 0 || stepNum >= steps.length) return;
 
+    resetShortestPathSelection(false);
     setStepIndex(stepNum);
     renderToIndex(stepNum);
   };
@@ -437,6 +612,27 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
   const canGoPrev = stepIndex >= 0;
   const canGoNext = stepIndex < steps.length - 1;
   const currentCode = (ALGORITHM_MAP[algorithmKey] ?? ALGORITHM_MAP.dijkstra).code;
+  const shortestPathCost = (() => {
+    if (!shortestPathSelection.origin || !shortestPathSelection.destination) return null;
+
+    const indexById = new Map(nodeIdsRef.current.map((id, idx) => [id, idx]));
+    const originIndex = indexById.get(shortestPathSelection.origin);
+    const destinationIndex = indexById.get(shortestPathSelection.destination);
+
+    if (originIndex === undefined || destinationIndex === undefined) return null;
+
+    const value = matrixState.A?.[originIndex]?.[destinationIndex];
+    return value === Infinity || value === undefined ? null : value;
+  })();
+  const shortestPathInfo = canUseShortestPathMode && shortestPathMode
+    ? (!shortestPathSelection.origin
+        ? "Haz clic derecho sobre el nodo origen."
+        : !shortestPathSelection.destination
+          ? "Ahora haz clic derecho sobre el nodo destino."
+          : shortestPathNodeIds.length
+            ? `Camino mínimo: ${shortestPathNodeIds.join(" -> ")}${shortestPathCost !== null ? ` | coste: ${shortestPathCost}` : ""}`
+            : "No existe camino mínimo entre esos nodos.")
+    : "";
 
   const isHighlightedCell = (matrix, i, j) =>
     highlightedCells.some(cell => cell.matrix === matrix && cell.i === i && cell.j === j);
@@ -459,6 +655,17 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
     const nodes = networkRef.current.body.data.nodes;
     const edges = networkRef.current.body.data.edges;
     const isDirectedGraph = Boolean(graphOptions?.edges?.arrows?.to?.enabled);
+    const currentPathNodeIds = shortestPathNodeIdsRef.current || [];
+    const currentSelection = shortestPathSelectionRef.current || { origin: null, destination: null };
+    const currentPathEdgeKeys = new Set();
+    const resultEdgeKey = currentSelection.origin !== null && currentSelection.destination !== null
+      ? getPairKey(currentSelection.origin, currentSelection.destination)
+      : null;
+
+    for (let i = 0; i < currentPathNodeIds.length - 1; i++) {
+      currentPathEdgeKeys.add(getPairKey(currentPathNodeIds[i], currentPathNodeIds[i + 1]));
+    }
+
     const displayEdges = [];
 
     edges.clear();
@@ -479,6 +686,10 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
           : [fromId, toId].sort().join("--");
         const originalEdge = originalFloydEdgesRef.current.get(pairKey);
         const isNewEdge = !originalEdge;
+        const isPathEdge = currentPathEdgeKeys.has(pairKey);
+        const isResultEdge = resultEdgeKey === pairKey;
+        const shouldHighlightBlue = isPathEdge && !isNewEdge;
+        const shouldHighlightRed = (isPathEdge && isNewEdge) || (isResultEdge && isNewEdge);
 
         displayEdges.push({
           id: `floyd-${pairKey}`,
@@ -486,7 +697,12 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
           to: originalEdge?.to ?? toId,
           label: formatMatrixCell(value),
           dashes: isNewEdge,
-          color: { color: "#666" },
+          color: {
+            color: shouldHighlightRed
+              ? "#DC2626"
+              : (shouldHighlightBlue ? "#2563EB" : "#666")
+          },
+          width: (shouldHighlightBlue || shouldHighlightRed) ? 3 : 1.5,
           arrows: graphOptions?.edges?.arrows,
           font: graphOptions?.edges?.font,
           smooth: graphOptions?.edges?.smooth,
@@ -499,8 +715,21 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
 
     // Mantener los nodos intactos y solo actualizar sus etiquetas si existieran en la red.
     nodes.forEach((node) => {
-      nodes.update({ id: node.id, label: baseLabelByNodeIdRef.current[node.id] ?? String(node.id) });
+      nodes.update({
+        id: node.id,
+        label: baseLabelByNodeIdRef.current[node.id] ?? String(node.id),
+        color: getDefaultNodeColor()
+      });
     });
+
+    if (shortestPathModeRef.current) {
+      if (currentSelection.origin !== null && currentSelection.destination === null) {
+        nodes.update({ id: currentSelection.origin, color: getOriginNodeColor() });
+      }
+      if (currentSelection.destination !== null) {
+        nodes.update({ id: currentSelection.destination, color: getDestinationNodeColor() });
+      }
+    }
   };
 
   const centerFloydGraphView = () => {
@@ -606,6 +835,18 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
                 )}
               </div>
             </div>
+
+          {canUseShortestPathMode && floydViewMode === "graph" && (
+            <div className="flex flex-wrap items-center gap-3 rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+              <button
+                onClick={toggleShortestPathMode}
+                className={`px-3 py-2 rounded font-semibold border transition-colors ${shortestPathMode ? "bg-blue-700 border-blue-700 text-white shadow-sm" : "bg-blue-600 border-blue-600 text-white hover:bg-blue-700 shadow-sm"}`}
+              >
+                {shortestPathMode ? "Cancelar camino mínimo" : "Calcular camino mínimo"}
+              </button>
+              <span className="font-medium">{shortestPathInfo || "Activa el modo para elegir dos nodos con clic derecho."}</span>
+            </div>
+          )}
 
             {floydViewMode === "matrices" ? (
               <>
