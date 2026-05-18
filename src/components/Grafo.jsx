@@ -594,7 +594,9 @@ const Grafo = () => {
 
       <div className="mt-2 text-sm text-gray-600 space-y-1">
         <p><strong>Clic izquierdo</strong> en área vacía: crear nuevo nodo</p>
+        <p><strong>Clic izquierdo</strong> en un nodo y arrastrar: mover el nodo</p>
         <p><strong>Clic derecho</strong> en nodo: seleccionar para conectar (se pone amarillo)</p>
+        <p><strong>Clic derecho</strong> en nodo: seleccionar para nodo origen con Dijkstra (se pone amarillo)</p>
         <p><strong>Clic derecho</strong> en otro nodo: crear arista entre ambos</p>
         <p><strong>Clic derecho</strong> en área vacía: cancelar selección</p>
         <p><strong>Clic central</strong> en nodo: eliminar nodo</p>
