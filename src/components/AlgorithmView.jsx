@@ -92,6 +92,7 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
   const [matrixState, setMatrixState] = useState({ A: [], P: [] });
   const [highlightedCells, setHighlightedCells] = useState([]);
   const [matrixReadHighlights, setMatrixReadHighlights] = useState([]);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const isFloydMode = algorithmKey === "floyd";
 
@@ -155,6 +156,50 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
     };
 
   }, [graphData, graphOptions, algorithmKey, isFloydMode]);
+
+  useEffect(() => {
+    if (!isPlaying || !steps.length) return;
+
+    const interval = setInterval(() => {
+      setStepIndex(prevIndex => {
+        const newIndex = prevIndex + 1;
+        if (newIndex >= steps.length) {
+          setIsPlaying(false);
+          return prevIndex;
+        }
+        return newIndex;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isPlaying, steps.length]);
+
+  useEffect(() => {
+    if (isPlaying && stepIndex >= 0 && stepIndex < steps.length) {
+      renderToIndex(stepIndex);
+    }
+  }, [stepIndex, isPlaying]);
+
+  const togglePlayPause = () => {
+    if (!steps.length) return;
+    
+    if (!isPlaying && stepIndex >= steps.length - 1) {
+      setStepIndex(-1);
+      if (isFloydMode) {
+        const baseMatrices =
+          initialFloydMatricesRef.current?.A?.length
+            ? initialFloydMatricesRef.current
+            : buildInitialFloydMatrices(graphData);
+        setMatrixState(cloneMatrixState(baseMatrices));
+        setHighlightedCells([]);
+        setMatrixReadHighlights([]);
+      } else {
+        resetGraphView();
+      }
+    }
+    
+    setIsPlaying(!isPlaying);
+  };
 
   const resetGraphView = () => {
 
@@ -298,6 +343,42 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
     renderToIndex(newIndex);
   };
 
+  const goToStart = () => {
+    if (stepIndex === -1) return;
+
+    setStepIndex(-1);
+
+    if (isFloydMode) {
+      const baseMatrices =
+        initialFloydMatricesRef.current?.A?.length
+          ? initialFloydMatricesRef.current
+          : buildInitialFloydMatrices(graphData);
+      setMatrixState(cloneMatrixState(baseMatrices));
+      setHighlightedCells([]);
+      setMatrixReadHighlights([]);
+    } else {
+      resetGraphView();
+    }
+  };
+
+  const goToEnd = () => {
+    if (!steps.length || stepIndex === steps.length - 1) return;
+
+    const newIndex = steps.length - 1;
+    setStepIndex(newIndex);
+    renderToIndex(newIndex);
+  };
+
+  const goToStep = (step) => {
+    if (!steps.length) return;
+
+    const stepNum = parseInt(step, 10);
+    if (stepNum < 0 || stepNum >= steps.length) return;
+
+    setStepIndex(stepNum);
+    renderToIndex(stepNum);
+  };
+
   const currentStep = stepIndex >= 0 ? steps[stepIndex] : null;
   const canGoPrev = stepIndex >= 0;
   const canGoNext = stepIndex < steps.length - 1;
@@ -395,22 +476,73 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
         ) : (
           <div className="h-[500px] border" ref={containerRef} />
         )}
-        <div className="mt-4 flex gap-2">
-          <button
-            onClick={prev}
-            disabled={!canGoPrev}
-            className="px-4 py-2 bg-gray-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Anterior
-          </button>
-          <button
-            onClick={next}
-            disabled={!canGoNext}
-            className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Siguiente
-          </button>
-          <button onClick={onBack} className="px-4 py-2 bg-red-500 text-white rounded">
+        <div className="mt-4 space-y-3">
+          <div className="flex gap-2 items-center justify-between">
+            <div className="flex gap-2 items-center">
+              <button
+                onClick={goToStart}
+                disabled={stepIndex === -1}
+                className="px-3 py-2 bg-gray-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600 font-bold"
+                title="Ir al inicio"
+              >
+                &#171;&#171;
+              </button>
+              <button
+                onClick={prev}
+                disabled={!canGoPrev}
+                className="px-3 py-2 bg-gray-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600 font-bold"
+                title="Paso anterior"
+              >
+                &#60;
+              </button>
+              <input
+                id="stepJump"
+                type="number"
+                min="0"
+                max={steps.length - 1}
+                value={stepIndex >= 0 ? stepIndex + 1 : ""}
+                onChange={(e) => {
+                  if (e.target.value === "") {
+                    goToStart();
+                  } else {
+                    goToStep(parseInt(e.target.value, 10) - 1);
+                  }
+                }}
+                disabled={!steps.length}
+                className="px-2 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed w-16 text-center"
+                placeholder="0"
+                title="Saltar a paso"
+              />
+              <button
+                onClick={next}
+                disabled={!canGoNext}
+                className="px-3 py-2 bg-blue-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-600 font-bold"
+                title="Paso siguiente"
+              >
+                &#62;
+              </button>
+              <button
+                onClick={goToEnd}
+                disabled={!steps.length || stepIndex === steps.length - 1}
+                className="px-3 py-2 bg-blue-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-600 font-bold"
+                title="Ir al final"
+              >
+                &#187;&#187;
+              </button>
+              <button
+                onClick={togglePlayPause}
+                disabled={!steps.length}
+                className={`px-3 py-2 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed font-bold ${isPlaying ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"}`}
+                title={isPlaying ? "Pausar" : "Reproducir"}
+              >
+                {isPlaying ? "⏸" : "▶"}
+              </button>
+            </div>
+            <div className="text-sm font-semibold text-gray-700 bg-gray-100 px-3 py-2 rounded">
+              Paso: <span className="text-blue-600">{stepIndex >= 0 ? stepIndex + 1 : 0}</span> / <span className="text-gray-600">{steps.length}</span>
+            </div>
+          </div>
+          <button onClick={onBack} className="w-full px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
             Volver
           </button>
         </div>
