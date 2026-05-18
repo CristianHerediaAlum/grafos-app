@@ -86,6 +86,7 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
   const baseLabelByNodeIdRef = useRef({});
   const nodeIdsRef = useRef([]);
   const initialFloydMatricesRef = useRef({ A: [], P: [] });
+  const originalFloydEdgesRef = useRef(new Map());
 
   const [steps, setSteps] = useState([]);
   const [stepIndex, setStepIndex] = useState(-1);
@@ -93,8 +94,19 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
   const [highlightedCells, setHighlightedCells] = useState([]);
   const [matrixReadHighlights, setMatrixReadHighlights] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [floydViewMode, setFloydViewMode] = useState("matrices"); // 'matrices' | 'graph'
 
   const isFloydMode = algorithmKey === "floyd";
+  const allowFloydNodeDragging = isFloydMode && floydViewMode === "graph";
+
+  const getNetworkOptions = () => ({
+    ...graphOptions,
+    interaction: {
+      ...(graphOptions?.interaction || {}),
+      dragNodes: allowFloydNodeDragging
+    },
+    physics: false
+  });
 
   useEffect(() => {
 
@@ -110,28 +122,41 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
 
     nodeIdsRef.current = graphData.nodes.map(n => n.id);
 
+    const isDirectedGraph = Boolean(graphOptions?.edges?.arrows?.to?.enabled);
+    const originalEdges = new Map();
+
+    for (const edge of graphData.edges || []) {
+      const fromKey = edge.from;
+      const toKey = edge.to;
+      const pairKey = isDirectedGraph
+        ? `${fromKey}->${toKey}`
+        : [fromKey, toKey].sort().join("--");
+
+      if (!originalEdges.has(pairKey)) {
+        originalEdges.set(pairKey, edge);
+      }
+    }
+
+    originalFloydEdgesRef.current = originalEdges;
+
     baseLabelByNodeIdRef.current = Object.fromEntries(
       graphData.nodes.map(n => [n.id, n.label ?? String(n.id)])
     );
 
-    if (!isFloydMode) {
+    if (!isFloydMode || floydViewMode === "graph") {
       const nodes = new DataSet(graphData.nodes);
       const edges = new DataSet(graphData.edges);
 
-      const network = new Network(containerRef.current, { nodes, edges }, {
-        ...graphOptions,
-        interaction: {
-          ...(graphOptions?.interaction || {}),
-          dragNodes: false
-        },
-        physics: false
-      });
+      const network = new Network(containerRef.current, { nodes, edges }, getNetworkOptions());
 
       networkRef.current = network;
     } else {
       const initialMatrices = buildInitialFloydMatrices(graphData);
       initialFloydMatricesRef.current = initialMatrices;
-      networkRef.current = null;
+      if (networkRef.current) {
+        try { networkRef.current.destroy(); } catch (e) {}
+        networkRef.current = null;
+      }
       setMatrixState(cloneMatrixState(initialMatrices));
       setHighlightedCells([]);
       setMatrixReadHighlights([]);
@@ -155,7 +180,32 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
       networkRef.current = null;
     };
 
-  }, [graphData, graphOptions, algorithmKey, isFloydMode]);
+  }, [graphData, graphOptions, algorithmKey, isFloydMode, floydViewMode]);
+
+  // Recreate/destroy network when switching floyd view mode
+  useEffect(() => {
+    if (!isFloydMode) return;
+
+    if (floydViewMode === "graph") {
+      // build network from current graphData
+      if (!graphData?.nodes?.length) return;
+      const nodes = new DataSet(graphData.nodes);
+      const edges = new DataSet(graphData.edges);
+
+      try { if (networkRef.current) networkRef.current.destroy(); } catch (e) {}
+
+      const network = new Network(containerRef.current, { nodes, edges }, getNetworkOptions());
+
+      networkRef.current = network;
+      // sync network with current matrices
+      updateFloydGraphView(matrixState);
+    } else {
+      if (networkRef.current) {
+        try { networkRef.current.destroy(); } catch (e) {}
+        networkRef.current = null;
+      }
+    }
+  }, [floydViewMode]);
 
   useEffect(() => {
     if (!isPlaying || !steps.length) return;
@@ -193,6 +243,7 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
         setMatrixState(cloneMatrixState(baseMatrices));
         setHighlightedCells([]);
         setMatrixReadHighlights([]);
+        updateFloydGraphView(baseMatrices);
       } else {
         resetGraphView();
       }
@@ -291,6 +342,7 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
     setMatrixState(nextState);
     setHighlightedCells(nextHighlights);
     setMatrixReadHighlights(currentStepReadRoles);
+    updateFloydGraphView(nextState);
   };
 
   const renderToIndex = (targetIndex) => {
@@ -334,6 +386,7 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
         setMatrixState(cloneMatrixState(baseMatrices));
         setHighlightedCells([]);
         setMatrixReadHighlights([]);
+        updateFloydGraphView(baseMatrices);
       } else {
         resetGraphView();
       }
@@ -356,6 +409,7 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
       setMatrixState(cloneMatrixState(baseMatrices));
       setHighlightedCells([]);
       setMatrixReadHighlights([]);
+      updateFloydGraphView(baseMatrices);
     } else {
       resetGraphView();
     }
@@ -396,6 +450,63 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
     if (roles.includes("ik")) return "ik";
     if (roles.includes("kj")) return "kj";
     return null;
+  };
+
+  const updateFloydGraphView = (mat) => {
+    if (!networkRef.current || !mat?.A?.length) return;
+
+    const nodeIds = nodeIdsRef.current || [];
+    const nodes = networkRef.current.body.data.nodes;
+    const edges = networkRef.current.body.data.edges;
+    const isDirectedGraph = Boolean(graphOptions?.edges?.arrows?.to?.enabled);
+    const displayEdges = [];
+
+    edges.clear();
+
+    for (let i = 0; i < nodeIds.length; i++) {
+      for (let j = 0; j < nodeIds.length; j++) {
+        if (i === j) continue;
+
+        const value = mat.A?.[i]?.[j];
+        if (value === undefined || value === Infinity) continue;
+
+        if (!isDirectedGraph && j < i) continue;
+
+        const fromId = nodeIds[i];
+        const toId = nodeIds[j];
+        const pairKey = isDirectedGraph
+          ? `${fromId}->${toId}`
+          : [fromId, toId].sort().join("--");
+        const originalEdge = originalFloydEdgesRef.current.get(pairKey);
+        const isNewEdge = !originalEdge;
+
+        displayEdges.push({
+          id: `floyd-${pairKey}`,
+          from: originalEdge?.from ?? fromId,
+          to: originalEdge?.to ?? toId,
+          label: formatMatrixCell(value),
+          dashes: isNewEdge,
+          color: { color: "#666" },
+          arrows: graphOptions?.edges?.arrows,
+          font: graphOptions?.edges?.font,
+          smooth: graphOptions?.edges?.smooth,
+          labelHighlightBold: false
+        });
+      }
+    }
+
+    edges.add(displayEdges);
+
+    // Mantener los nodos intactos y solo actualizar sus etiquetas si existieran en la red.
+    nodes.forEach((node) => {
+      nodes.update({ id: node.id, label: baseLabelByNodeIdRef.current[node.id] ?? String(node.id) });
+    });
+  };
+
+  const centerFloydGraphView = () => {
+    if (networkRef.current && floydViewMode === "graph") {
+      networkRef.current.fit({ animation: { duration: 350, easingFunction: "easeInOutQuad" } });
+    }
   };
 
   const renderMatrix = (matrixKey) => {
@@ -461,17 +572,49 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
       <div className="w-2/3">
         {isFloydMode ? (
           <div className="h-[500px] overflow-auto space-y-4 border bg-gray-50 p-4">
-            <div className="rounded border border-gray-300 bg-white p-3 shadow-sm">
-              <h3 className="mb-2 text-sm font-semibold text-gray-700">Leyenda de colores (Floyd)</h3>
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-blue-800">A[i][k]</span>
-                <span className="rounded border border-red-300 bg-red-50 px-2 py-1 text-red-800">A[k][j]</span>
-                <span className="rounded border border-purple-300 bg-purple-50 px-2 py-1 text-purple-800">A[i][j]</span>
-                <span className="rounded border border-yellow-300 bg-yellow-200 px-2 py-1 text-yellow-900 font-semibold">Celda actualizada</span>
+            <div className="flex items-start justify-between gap-4">
+              <div className="rounded border border-gray-300 bg-white p-3 shadow-sm">
+                <h3 className="mb-2 text-sm font-semibold text-gray-700">Leyenda de colores (Floyd)</h3>
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-blue-800">A[i][k]</span>
+                  <span className="rounded border border-red-300 bg-red-50 px-2 py-1 text-red-800">A[k][j]</span>
+                  <span className="rounded border border-purple-300 bg-purple-50 px-2 py-1 text-purple-800">A[i][j]</span>
+                  <span className="rounded border border-yellow-300 bg-yellow-200 px-2 py-1 text-yellow-900 font-semibold">Celda actualizada</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setFloydViewMode("matrices")}
+                  className={`px-3 py-2 rounded font-semibold border transition-colors ${floydViewMode === "matrices" ? "bg-blue-600 border-blue-600 text-white shadow-sm" : "bg-gray-100 border-gray-300 text-gray-800 hover:bg-gray-200"}`}
+                >
+                  Matrices
+                </button>
+                <button
+                  onClick={() => setFloydViewMode("graph")}
+                  className={`px-3 py-2 rounded font-semibold border transition-colors ${floydViewMode === "graph" ? "bg-blue-600 border-blue-600 text-white shadow-sm" : "bg-gray-100 border-gray-300 text-gray-800 hover:bg-gray-200"}`}
+                >
+                  Grafo
+                </button>
+                {floydViewMode === "graph" && (
+                  <button
+                    onClick={centerFloydGraphView}
+                    className="px-3 py-2 rounded font-semibold border border-blue-700 bg-blue-600 text-white transition-colors hover:bg-blue-700 shadow-sm"
+                    title="Centrar vista"
+                  >
+                    Centrar
+                  </button>
+                )}
               </div>
             </div>
-            {renderMatrix("A")}
-            {renderMatrix("P")}
+
+            {floydViewMode === "matrices" ? (
+              <>
+                {renderMatrix("A")}
+                {renderMatrix("P")}
+              </>
+            ) : (
+              <div className="h-[420px] border" ref={containerRef} />
+            )}
           </div>
         ) : (
           <div className="h-[500px] border" ref={containerRef} />
