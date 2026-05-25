@@ -103,14 +103,14 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
   const [shortestPathNodeIds, setShortestPathNodeIds] = useState([]);
 
   const isFloydMode = algorithmKey === "floyd";
-  const allowFloydNodeDragging = isFloydMode && floydViewMode === "graph";
+  const allowGraphNodeDragging = floydViewMode === "graph" || algorithmKey === "dijkstra";
   const canUseShortestPathMode = isFloydMode && floydViewMode === "graph" && stepIndex === steps.length - 1 && steps.length > 0;
 
   const getNetworkOptions = () => ({
     ...graphOptions,
     interaction: {
       ...(graphOptions?.interaction || {}),
-      dragNodes: allowFloydNodeDragging
+      dragNodes: allowGraphNodeDragging
     },
     physics: false
   });
@@ -732,9 +732,15 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
     }
   };
 
-  const centerFloydGraphView = () => {
-    if (networkRef.current && floydViewMode === "graph") {
+  const centerGraphView = () => {
+    if (networkRef.current) {
       networkRef.current.fit({ animation: { duration: 350, easingFunction: "easeInOutQuad" } });
+    }
+  };
+
+  const centerFloydGraphView = () => {
+    if (floydViewMode === "graph") {
+      centerGraphView();
     }
   };
 
@@ -858,7 +864,18 @@ const AlgorithmView = ({ graphData, graphOptions, algorithmKey = "dijkstra", onB
             )}
           </div>
         ) : (
-          <div className="h-[500px] border" ref={containerRef} />
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <button
+                onClick={centerGraphView}
+                className="px-3 py-2 rounded font-semibold border border-blue-700 bg-blue-600 text-white transition-colors hover:bg-blue-700 shadow-sm"
+                title="Centrar vista"
+              >
+                Centrar
+              </button>
+            </div>
+            <div className="h-[500px] border" ref={containerRef} />
+          </div>
         )}
         <div className="mt-4 space-y-3">
           <div className="flex gap-2 items-center justify-between">
