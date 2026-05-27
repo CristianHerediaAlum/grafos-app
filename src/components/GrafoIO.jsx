@@ -1,3 +1,4 @@
+// src/components/GrafoIO.jsx
 import React, { useRef, useState, useEffect } from "react";
 
 const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirected }) => {
@@ -25,6 +26,7 @@ const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirecte
     }, []);
 
     // Primero formateamos los nodos y aristas
+    // Además nos libramos de metadatos que no interesan
 
     const sanitizeNodes = (nodesArray) =>
         nodesArray.map(n => ({ id: n.id, label: n.label }));
@@ -43,7 +45,7 @@ const GrafoIO = ({/*nodes, edges, */ onImport, isWeighted, networkRef, isDirecte
 
     // Procesar aristas según la configuración actual del grafo
     const processEdgesForCurrentConfig = (edges) => {
-        let processedEdges = [...edges];
+        let processedEdges = [...edges]; // No copiamos referencia
 
         // 1. Manejar dirigido/no dirigido
         if (!isDirected) {
