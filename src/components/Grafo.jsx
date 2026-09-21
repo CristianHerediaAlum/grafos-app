@@ -128,8 +128,17 @@ const Grafo = () => {
         const newEdge = { from, to };
 
         if (isWeighted) {
-          const weight = prompt(`Introduce el peso de la arista ${from} -> ${to}:`, "1");
-          newEdge.label = weight || "1";
+          const rawWeight = prompt(`Introduce el peso de la arista ${from} -> ${to}:`, "1");
+
+          if (rawWeight === null) return;
+
+          const weight = Number(rawWeight.trim());
+          if (rawWeight.trim() === "" || !Number.isFinite(weight)) {
+            alert("El peso debe ser un número finito mayor o igual que 0.");
+            return;
+          }
+
+          newEdge.label = String(weight);
         }
 
         edges.add(newEdge);
