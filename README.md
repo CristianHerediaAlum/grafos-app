@@ -15,3 +15,6 @@ Para ejecutar el proyecto en modo desarrollo se debe utilizar el siguiente coman
 npm run dev
 ```
 Esto levantará el servidor y se mostrará en la terminal el puerto utilizado como por ejemplo `http://localhost:5173/` (es posible que no sea el mismo puerto).
+
+## Página web desplegada
+Graphjoy está disponible en la web medianet el siguiente enlace: https://graphjoy.netlify.app/
