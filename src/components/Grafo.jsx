@@ -75,6 +75,7 @@ const Grafo = () => {
   const [algorithmMode, setAlgorithmMode] = useState(false);
   const [graphSnapshot, setGraphSnapshot] = useState(null);
   const [selectedAlgorithm, setSelectedAlgorithm] = useState('dijkstra');
+  const [pendingNodeCount, setPendingNodeCount] = useState(null);
 
   useEffect(() => {
     if (algorithmMode) return;
@@ -369,8 +370,14 @@ const Grafo = () => {
       return;
     }
 
-    // Pedir si quiere grafo completo
-    const isComplete = confirm("¿Deseas un grafo completo? (todas las aristas posibles)\n\nAceptar = Completo\nCancelar = Aleatorio");
+    setPendingNodeCount(nodeCount);
+  };
+
+  const generateGraph = (isComplete) => {
+    if (!networkRef.current || pendingNodeCount === null) return;
+
+    const nodeCount = pendingNodeCount;
+    setPendingNodeCount(null);
 
     // Limpiar grafo anterior
     clearGraph();
@@ -497,6 +504,41 @@ const Grafo = () => {
   }
   return (
     <div className="w-full">
+      {pendingNodeCount !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="graph-type-title">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 text-gray-800 shadow-xl">
+            <h2 id="graph-type-title" className="mb-2 text-xl font-semibold">
+              Tipo de grafo
+            </h2>
+            <p className="mb-6 text-gray-600">
+              Elige cómo generar el grafo de {pendingNodeCount} nodos.
+            </p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingNodeCount(null)}
+                className="rounded bg-gray-200 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-300"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => generateGraph(false)}
+                className="rounded bg-cyan-500 px-4 py-2 text-white transition-colors hover:bg-cyan-600"
+              >
+                Aleatorio
+              </button>
+              <button
+                type="button"
+                onClick={() => generateGraph(true)}
+                className="rounded bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600"
+              >
+                Completo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="mb-4 flex gap-2 flex-wrap">
         {isNetworkReady && (
           <GrafoIO
@@ -605,7 +647,7 @@ const Grafo = () => {
         <p><strong>Clic izquierdo</strong> en área vacía: crear nuevo nodo</p>
         <p><strong>Clic izquierdo</strong> en un nodo y arrastrar: mover el nodo</p>
         <p><strong>Clic derecho</strong> en nodo: seleccionar para conectar (se pone amarillo)</p>
-        <p><strong>Clic derecho</strong> en nodo: seleccionar para nodo origen con Dijkstra (se pone amarillo)</p>
+        <p><strong>Clic derecho</strong> en nodo: seleccionar para nodo origen con <strong> Dijkstra </strong>(se pone amarillo)</p>
         <p><strong>Clic derecho</strong> en otro nodo: crear arista entre ambos</p>
         <p><strong>Clic derecho</strong> en área vacía: cancelar selección</p>
         <p><strong>Clic central</strong> en nodo: eliminar nodo</p>
